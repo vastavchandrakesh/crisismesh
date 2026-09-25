@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CrisisMesh — Responder Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="./leaflet/leaflet.css"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f0e8; color: #333; }
+
+    /* ── Login ─────────────────────────────────────────────────────────── */
+    #login-screen {
+      position: fixed; inset: 0; z-index: 1000;
+      background: linear-gradient(135deg, #1a6b5a 0%, #0f4a3d 100%);
+      display: flex; align-items: center; justify-content: center;
+    }
+    #login-box {
+      background: #fff; border-radius: 14px; padding: 40px 36px;
+      width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,.3);
+      text-align: center;
+    }
+    .brand-bar { width: 40px; height: 8px; background: #c8922a; border-radius: 4px; margin: 0 auto 18px; }
+    #login-box h1 { font-size: 1.6rem; letter-spacing: 3px; color: #1a6b5a; margin-bottom: 4px; }
+    #login-box .sub { font-size: .8rem; color: #888; margin-bottom: 24px; letter-spacing: 1px; }
+    #login-error { color: #c0392b; font-size: .82rem; min-height: 18px; margin-bottom: 8px; }
+    #login-box input {
+      width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px;
+      font-size: .9rem; margin-bottom: 10px; outline: none;
+    }
+    #login-box input:focus { border-color: #1a6b5a; }
+    #login-btn {
+      width: 100%; padding: 12px; background: #1a6b5a; color: #fff;
+      border: none; border-radius: 8px; font-weight: 700; font-size: .9rem;
+      cursor: pointer; letter-spacing: 1px; margin-top: 4px;
+    }
+    #login-btn:hover { background: #145a4b; }
+    .login-hint { font-size: .72rem; color: #bbb; margin-top: 16px; }
+    .login-hint code { background: #f5f5f5; padding: 1px 5px; border-radius: 3px; color: #555; }
+
+    /* ── App shell ─────────────────────────────────────────────────────── */
+    #app { display: none; flex-direction: column; height: 100vh; }
+
+    /* ── Offline banner ────────────────────────────────────────────────── */
+    #offline-banner {
+      display: none; background: #c0392b; color: #fff;
+      padding: 8px 20px; font-size: .82rem; font-weight: 700;
+      align-items: center; gap: 10px; justify-content: center;
+    }
+    #offline-banner span { font-weight: 400; opacity: .85; }
+
+    /* ── Header ────────────────────────────────────────────────────────── */
+    header {
+      background: #1a6b5a; color: #fff; padding: 10px 18px;
+      display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    }
+    .brand-mark { width: 8px; height: 28px; background: #c8922a; border-radius: 3px; }
+    header h1 { font-size: 1.2rem; letter-spacing: 2px; }
+    .mode-badge {
+      background: rgba(200,146,42,.25); border: 1px solid #c8922a;
+      color: #f5d18a; padding: 2px 10px; border-radius: 20px; font-size: .72rem; font-weight: 700;
+    }
+    #conn-status { font-size: .8rem; opacity: .85; }
+    .user-info { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    #user-badge {
+      background: rgba(255,255,255,.15); padding: 3px 10px;
+      border-radius: 20px; font-size: .75rem; font-weight: 700;
+    }
+    #logout-btn {
+      background: transparent; border: 1px solid rgba(255,255,255,.4); color: #fff;
+      padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: .75rem;
+    }
+    #logout-btn:hover { background: rgba(255,255,255,.1); }
+
+    /* ── Main layout ───────────────────────────────────────────────────── */
+    .main { display: flex; flex: 1; overflow: hidden; }
+    #map { flex: 1; min-width: 0; }
+
+    /* ── Sidebar ───────────────────────────────────────────────────────── */
+    .sidebar {
+      width: 400px; background: #fff; display: flex; flex-direction: column;
+      border-left: 1px solid #ddd; overflow: hidden;
+    }
+    .sidebar-tabs { display: flex; border-bottom: 2px solid #e5e0d8; flex-shrink: 0; }
+    .sidebar-tabs button {
+      flex: 1; padding: 8px 4px; border: none; background: transparent;
+      cursor: pointer; font-size: .75rem; font-weight: 600; color: #888;
+      transition: color .2s;
+    }
+    .sidebar-tabs button.active { color: #1a6b5a; border-bottom: 3px solid #1a6b5a; }
+    .tab-panel { display: none; flex: 1; overflow-y: auto; padding: 12px; }
+    .tab-panel.active { display: block; }
+
+    /* ── Incident cards ────────────────────────────────────────────────── */
+    .incident-card {
+      border: 1px solid #e5e0d8; border-radius: 10px; padding: 12px; margin-bottom: 10px;
+      cursor: pointer; transition: box-shadow .2s;
+    }
+    .incident-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+    .incident-card .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .incident-card .sector { font-weight: 700; font-size: .9rem; }
+    .priority-badge { padding: 2px 8px; border-radius: 20px; font-size: .7rem; font-weight: 700; }
+    .priority-CRITICAL { background: #c0392b; color: #fff; }
+    .priority-HIGH     { background: #e67e22; color: #fff; }
+    .priority-MEDIUM   { background: #2980b9; color: #fff; }
+    .priority-LOW      { background: #27ae60; color: #fff; }
+    .conf-bar { height: 6px; background: #eee; border-radius: 3px; margin: 6px 0; }
+    .conf-fill { height: 100%; border-radius: 3px; background: #1a6b5a; }
+    .meta { font-size: .75rem; color: #888; margin-top: 4px; }
+    .freshness-badge {
+      display: inline-block; padding: 1px 7px; border-radius: 10px;
+      font-size: .68rem; font-weight: 700;
+    }
+    .verify-btn {
+      margin-top: 8px; padding: 5px 14px; border: none; border-radius: 6px;
+      background: #1a6b5a; color: #fff; cursor: pointer; font-size: .78rem;
+    }
+    .verify-btn:hover { background: #145a4b; }
+    .evidence-box { padding: 8px; background: #f9f7f3; border-radius: 6px; margin-top: 8px; font-size: .78rem; }
+    #empty-msg { color: #aaa; text-align: center; padding: 40px 20px; font-size: .9rem; }
+
+    /* ── Event feed ────────────────────────────────────────────────────── */
+    .event-card {
+      border-left: 3px solid #1a6b5a; padding: 8px 10px; margin-bottom: 8px;
+      background: #f9f7f3; border-radius: 0 6px 6px 0; font-size: .78rem;
+    }
+    .event-card .device { font-weight: 700; color: #1a6b5a; }
+    .event-card .transcript { margin-top: 3px; color: #555; font-style: italic; }
+    .event-card .conf { color: #888; margin-top: 2px; }
+
+    /* ── Demo Control Panel ────────────────────────────────────────────── */
+    .demo-panel { display: flex; flex-direction: column; gap: 14px; }
+    .demo-scenario-header { display: flex; flex-direction: column; gap: 3px; }
+    .demo-label { font-size: .7rem; font-weight: 700; color: #888; letter-spacing: 1px; text-transform: uppercase; }
+    .demo-scenario-name { font-size: .85rem; font-weight: 700; color: #1a6b5a; }
+
+    .demo-big-btn {
+      width: 100%; padding: 14px; background: #1a6b5a; color: #fff;
+      border: none; border-radius: 8px; font-weight: 700; font-size: .95rem;
+      cursor: pointer; letter-spacing: .5px;
+    }
+    .demo-big-btn:hover:not(:disabled) { background: #145a4b; }
+    .demo-big-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    .demo-section-label {
+      font-size: .68rem; font-weight: 700; color: #aaa; letter-spacing: 1px;
+      text-transform: uppercase; border-top: 1px solid #f0ece4; padding-top: 10px;
+    }
+    .demo-section-label.danger { color: #c0392b; }
+
+    .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .demo-evt-btn {
+      padding: 9px 6px; border: none; border-radius: 7px; font-weight: 700;
+      font-size: .78rem; cursor: pointer; transition: opacity .15s;
+    }
+    .demo-evt-btn:hover { opacity: .85; }
+    .demo-evt-btn.critical { background: #fdecea; color: #c0392b; border: 1px solid #f5b7b1; }
+    .demo-evt-btn.high     { background: #fef5e7; color: #e67e22; border: 1px solid #fad7a0; }
+    .demo-evt-btn.medium   { background: #eaf4fd; color: #2980b9; border: 1px solid #aed6f1; }
+    .demo-evt-btn.low      { background: #eafaf1; color: #27ae60; border: 1px solid #a9dfbf; }
+
+    .offline-sim { background: #f9f7f3; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .sim-status { font-size: .8rem; font-weight: 700; padding: 6px 10px; border-radius: 6px; }
+    .sim-status.online  { background: #eafaf1; color: #27ae60; }
+    .sim-status.offline { background: #fdecea; color: #c0392b; }
+    .offline-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .offline-btns button {
+      padding: 8px; border: none; border-radius: 6px; font-size: .75rem;
+      font-weight: 700; cursor: pointer;
+    }
+    .offline-btns button:first-child { background: #c0392b; color: #fff; }
+    .offline-btns button:first-child:disabled { opacity: .5; cursor: not-allowed; }
+    .offline-btns button:last-child { background: #1a6b5a; color: #fff; }
+    .offline-btns button:last-child:disabled { opacity: .5; cursor: not-allowed; }
+    #offline-queue-list { font-size: .75rem; max-height: 80px; overflow-y: auto; }
+    .queue-item { padding: 3px 6px; background: #fff3e0; border-radius: 4px; margin-top: 3px; color: #e67e22; font-weight: 600; }
+
+    .danger-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .danger-btn {
+      padding: 8px; background: #fdecea; color: #c0392b; border: 1px solid #f5b7b1;
+      border-radius: 6px; font-size: .75rem; font-weight: 700; cursor: pointer;
+    }
+    .danger-btn:hover { background: #f5b7b1; }
+
+    /* ── Relay simulation ──────────────────────────────────────────────── */
+    .relay-panel { display: flex; flex-direction: column; gap: 12px; }
+    .relay-header { display: flex; flex-direction: column; gap: 3px; }
+    .relay-header span { font-weight: 700; font-size: .9rem; }
+    .relay-note { font-size: .7rem; color: #c8922a; font-style: italic; }
+    #relay-btn {
+      padding: 10px; background: #2980b9; color: #fff; border: none;
+      border-radius: 7px; font-weight: 700; cursor: pointer; font-size: .82rem;
+    }
+    #relay-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .relay-chain { display: flex; flex-direction: column; align-items: center; gap: 0; }
+    .relay-node {
+      width: 100%; padding: 10px 14px; border-radius: 8px; border: 2px solid #e5e0d8;
+      display: flex; align-items: center; gap: 10px; transition: all .3s;
+    }
+    .relay-node.offline { background: #fdecea; border-color: #f5b7b1; }
+    .relay-node.relay   { background: #eaf4fd; border-color: #aed6f1; }
+    .relay-node.online  { background: #eafaf1; border-color: #a9dfbf; }
+    .relay-node.active  { box-shadow: 0 0 0 3px rgba(41,128,185,.4); transform: scale(1.02); }
+    .rn-icon { font-size: 1.3rem; }
+    .rn-label { font-weight: 700; font-size: .85rem; flex: 1; }
+    .rn-status { font-size: .72rem; font-weight: 700; }
+    .relay-node.offline .rn-status { color: #c0392b; }
+    .relay-node.relay   .rn-status { color: #2980b9; }
+    .relay-node.online  .rn-status { color: #27ae60; }
+    .relay-arrow {
+      font-size: .72rem; color: #aaa; padding: 4px 0; text-align: center;
+      transition: color .3s; font-style: italic;
+    }
+    .relay-arrow.active { color: #2980b9; font-weight: 700; }
+    #relay-log { font-size: .72rem; }
+    .relay-log-entry { padding: 4px 8px; background: #f9f7f3; border-radius: 4px; margin-bottom: 3px; color: #555; }
+    .relay-log-entry.success { background: #eafaf1; color: #27ae60; font-weight: 700; }
+
+    /* ── Zone form ─────────────────────────────────────────────────────── */
+    .zone-form h3 { font-size: .9rem; margin-bottom: 10px; }
+    .zone-form input {
+      width: 100%; margin-bottom: 8px; padding: 8px; border: 1px solid #ddd;
+      border-radius: 6px; font-size: .85rem;
+    }
+    .zone-form button {
+      width: 100%; padding: 10px; background: #1a6b5a; color: #fff;
+      border: none; border-radius: 6px; cursor: pointer; font-weight: 700;
+    }
+    .zone-form button:hover { background: #145a4b; }
+
+    /* ── Stats bar ─────────────────────────────────────────────────────── */
+    #stats-bar {
+      display: flex; background: #112e27; padding: 5px 18px; flex-shrink: 0;
+    }
+    .stat { flex: 1; text-align: center; padding: 5px 4px; border-right: 1px solid rgba(255,255,255,.07); }
+    .stat:last-child { border-right: none; }
+    .stat span { display: block; font-size: 1.15rem; font-weight: 700; color: #fff; line-height: 1.1; }
+    .stat label { font-size: .55rem; color: rgba(255,255,255,.4); letter-spacing: 1px; text-transform: uppercase; }
+    .stat.s-critical span { color: #e74c3c; }
+    .stat.s-high     span { color: #e67e22; }
+    .stat.s-ok       span { color: #2ecc71; }
+
+    /* ── Demo script ────────────────────────────────────────────────────── */
+    .demo-script { background: #f0f8f5; border-radius: 8px; padding: 10px 12px; border-left: 3px solid #1a6b5a; }
+    .script-step { font-size: .75rem; color: #555; padding: 5px 0; border-bottom: 1px solid rgba(26,107,90,.09); }
+    .script-step:last-child { border-bottom: none; }
+    .script-step b { color: #1a6b5a; }
+    .script-num { display: inline-block; background: #1a6b5a; color: #fff; font-size: .65rem;
+      font-weight: 700; width: 16px; height: 16px; border-radius: 50%;
+      text-align: center; line-height: 16px; margin-right: 6px; }
+
+    /* ── Privacy panel ──────────────────────────────────────────────────── */
+    .privacy-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0ece4; font-size: .78rem; }
+    .privacy-row:last-child { border-bottom: none; }
+    .priv-icon { font-size: 1rem; }
+    .priv-status { font-weight: 700; }
+    .priv-on  { color: #27ae60; }
+    .priv-off { color: #c0392b; }
+    .device-list { font-size: .7rem; max-height: 70px; overflow-y: auto; margin-top: 4px; }
+    .device-item { padding: 2px 8px; background: #f0f8f5; border-radius: 4px; margin-top: 3px; color: #1a6b5a; font-weight: 600; }
+
+    /* ── Resolve button ─────────────────────────────────────────────────── */
+    .resolve-btn { margin-top: 8px; margin-left: 6px; padding: 5px 14px; border: none; border-radius: 6px;
+      background: #8e44ad; color: #fff; cursor: pointer; font-size: .78rem; }
+    .resolve-btn:hover { background: #7d3c98; }
+
+    /* ── Incident highlight ─────────────────────────────────────────────── */
+    .incident-card.highlighted { box-shadow: 0 0 0 3px #1a6b5a, 0 4px 16px rgba(26,107,90,.25); }
+
+    /* ── Audit log ─────────────────────────────────────────────────────── */
+    .audit-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .audit-header span { font-size: .8rem; font-weight: 700; color: #555; letter-spacing: 1px; }
+    .audit-header button {
+      padding: 4px 10px; background: #f5f0e8; border: 1px solid #ddd;
+      border-radius: 5px; cursor: pointer; font-size: .75rem;
+    }
+    .audit-entry {
+      display: flex; gap: 8px; padding: 6px 8px; border-radius: 5px;
+      margin-bottom: 4px; font-size: .72rem; background: #f9f7f3; align-items: baseline;
+    }
+    .audit-time   { color: #aaa; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+    .audit-action { font-weight: 700; color: #1a6b5a; flex-shrink: 0; }
+    .audit-detail { color: #777; word-break: break-all; }
+  </style>
+</head>
+<body>
+
+<!-- ── Login screen ──────────────────────────────────────────────────────────── -->
+<div id="login-screen">
+  <div id="login-box">
+    <div class="brand-bar"></div>
+    <h1>CRISISMESH</h1>
+    <div class="sub">RESPONDER PORTAL</div>
+    <div id="login-error"></div>
+    <input id="lusername" placeholder="Username" autocomplete="username" />
+    <input id="lpassword" type="password" placeholder="Password" autocomplete="current-password" />
+    <button id="login-btn">SIGN IN</button>
+    <div class="login-hint">
+      Demo: <code>responder / demo123</code> &nbsp;·&nbsp; <code>admin / admin123</code>
+    </div>
+  </div>
+</div>
+
+<!-- ── Main application ──────────────────────────────────────────────────────── -->
+<div id="app">
+
+  <div id="offline-banner">
+    📡 OFFLINE MODE — Events queued locally &nbsp;<span id="queue-count">0</span> pending
+  </div>
+
+  <header>
+    <div class="brand-mark"></div>
+    <h1>CRISISMESH</h1>
+    <span class="mode-badge">DISASTER RESPONSE MODE</span>
+    <span id="conn-status">⚪ Connecting…</span>
+    <div class="user-info">
+      <span id="user-badge"></span>
+      <button id="logout-btn">Sign Out</button>
+    </div>
+  </header>
+
+  <div id="stats-bar">
+    <div class="stat s-critical"><span id="stat-critical">0</span><label>Critical</label></div>
+    <div class="stat s-high">    <span id="stat-high">0</span>    <label>High</label></div>
+    <div class="stat">           <span id="stat-medium">0</span>   <label>Medium</label></div>
+    <div class="stat s-ok">      <span id="stat-verified">0</span> <label>Verified</label></div>
+    <div class="stat">           <span id="stat-signals">0</span>  <label>Signals</label></div>
+    <div class="stat">           <span id="stat-total">0</span>    <label>Incidents</label></div>
+  </div>
+
+  <div class="main">
+    <div id="map"></div>
+
+    <div class="sidebar">
+      <div class="sidebar-tabs">
+        <button class="active" onclick="switchTab('incidents', this)">Incidents</button>
+        <button onclick="switchTab('events', this)">Events</button>
+        <button onclick="switchTab('demo', this)">Demo ⚡</button>
+        <button onclick="switchTab('relay', this)">Relay</button>
+        <button onclick="switchTab('zones', this)">Zones</button>
+        <button onclick="switchTab('audit', this)">Audit</button>
+      </div>
+
+      <!-- Incidents -->
+      <div id="tab-incidents" class="tab-panel active">
+        <div id="incident-list">
+          <div id="empty-msg">No incidents yet.<br>Use the <b>Demo ⚡</b> tab to generate alerts.</div>
+        </div>
+      </div>
+
+      <!-- Events feed -->
+      <div id="tab-events" class="tab-panel">
+        <div id="event-list"></div>
+      </div>
+
+      <!-- Demo Control Panel -->
+      <div id="tab-demo" class="tab-panel">
+        <div class="demo-panel">
+          <div class="demo-scenario-header">
+            <div class="demo-label">Demo Control Panel</div>
+            <div class="demo-scenario-name">📍 Building Collapse — Sector A-12</div>
+          </div>
+
+          <button class="demo-big-btn" id="scenario-btn" onclick="startScenario()">▶ START FULL SCENARIO</button>
+
+          <div class="demo-section-label">Generate Individual Events</div>
+          <div class="demo-grid">
+            <button class="demo-evt-btn critical" onclick="generateEvent('help')">⚡ HELP</button>
+            <button class="demo-evt-btn critical" onclick="generateEvent('trapped')">⚡ TRAPPED</button>
+            <button class="demo-evt-btn high"     onclick="generateEvent('knocking')">⚡ KNOCKING</button>
+            <button class="demo-evt-btn medium"   onclick="generateEvent('crying')">⚡ CRYING</button>
+            <button class="demo-evt-btn medium"   onclick="generateEvent('medical')">⚡ MEDICAL</button>
+            <button class="demo-evt-btn low"      onclick="generateEvent('noise')">🔇 NOISE</button>
+          </div>
+
+          <div class="demo-section-label">Offline Simulation</div>
+          <div class="offline-sim">
+            <div id="offline-sim-status" class="sim-status online">🟢 CONNECTED &nbsp;·&nbsp; <b id="queued-count">0</b> queued</div>
+            <div class="offline-btns">
+              <button id="btn-offline" onclick="simulateConnectionLoss()">📡 SIMULATE LOSS</button>
+              <button id="btn-restore" onclick="restoreConnection()" disabled>↺ RESTORE &amp; SYNC</button>
+            </div>
+            <div id="offline-queue-list"></div>
+          </div>
+
+          <div class="demo-section-label">3-Minute Demo Script</div>
+          <div class="demo-script">
+            <div class="script-step"><span class="script-num">1</span>Click <b>START FULL SCENARIO</b> → 5 devices fire, 1 clustered incident appears on map</div>
+            <div class="script-step"><span class="script-num">2</span>Click the incident card → expand evidence (HELP + TRAPPED + KNOCKING fused)</div>
+            <div class="script-step"><span class="script-num">3</span>Click <b>✓ Verify</b> then <b>Resolve</b> to walk through the responder workflow</div>
+            <div class="script-step"><span class="script-num">4</span>Click <b>SIMULATE LOSS</b> → generate 2 more events → watch them queue locally</div>
+            <div class="script-step"><span class="script-num">5</span>Click <b>RESTORE &amp; SYNC</b> → offline events appear on dashboard with [offline sync] tag</div>
+            <div class="script-step"><span class="script-num">6</span>Switch to <b>Relay</b> tab → click Animate to show the Bluetooth mesh relay chain</div>
+            <div class="script-step"><span class="script-num">7</span>Switch to <b>Audit</b> tab → show the complete consent + event + verification trail</div>
+          </div>
+
+          <div class="demo-section-label">Privacy &amp; Consent Status</div>
+          <div style="background:#f9f7f3;border-radius:8px;padding:10px 12px;">
+            <div class="privacy-row">
+              <span class="priv-icon">🎙</span>
+              <span style="flex:1">Microphone</span>
+              <span class="priv-status priv-on">● Emergency monitoring (simulated)</span>
+            </div>
+            <div class="privacy-row">
+              <span class="priv-icon">🔒</span>
+              <span style="flex:1">Storage</span>
+              <span class="priv-status priv-on">● Local SQLite only — no cloud</span>
+            </div>
+            <div class="privacy-row">
+              <span class="priv-icon">📱</span>
+              <span style="flex:1">Consented devices</span>
+              <button onclick="loadDevices()" style="padding:2px 8px;font-size:.7rem;border:1px solid #ddd;border-radius:4px;cursor:pointer;background:#fff">Refresh</button>
+            </div>
+            <div class="device-list" id="device-list"><span style="color:#aaa">Click Refresh to load</span></div>
+          </div>
+
+          <div class="demo-section-label danger">Danger Zone</div>
+          <div class="danger-btns">
+            <button class="danger-btn" onclick="clearAll()">🗑 CLEAR INCIDENTS</button>
+            <button class="danger-btn" onclick="resetDemo()">↺ RESET DEMO</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Relay Simulation -->
+      <div id="tab-relay" class="tab-panel">
+        <div class="relay-panel">
+          <div class="relay-header">
+            <span>Prototype Relay Simulation</span>
+            <small class="relay-note">Software simulation — not a production mesh network</small>
+          </div>
+          <button id="relay-btn" onclick="animateRelay()">▶ ANIMATE RELAY</button>
+          <div class="relay-chain">
+            <div class="relay-node offline" id="rn-a">
+              <div class="rn-icon">📱</div>
+              <div class="rn-label">DEMO-01 (Phone-7F3A)</div>
+              <div class="rn-status">● OFFLINE</div>
+            </div>
+            <div class="relay-arrow" id="ra-1">↕ Bluetooth LE</div>
+            <div class="relay-node relay" id="rn-b">
+              <div class="rn-icon">📱</div>
+              <div class="rn-label">DEMO-02 (Phone-2C8B)</div>
+              <div class="rn-status">● RELAY NODE</div>
+            </div>
+            <div class="relay-arrow" id="ra-2">↕ Bluetooth LE</div>
+            <div class="relay-node relay" id="rn-c">
+              <div class="rn-icon">📱</div>
+              <div class="rn-label">DEMO-03 (Phone-9D4F)</div>
+              <div class="rn-status">● RELAY NODE</div>
+            </div>
+            <div class="relay-arrow" id="ra-3">↕ Wi-Fi / LTE</div>
+            <div class="relay-node online" id="rn-gw">
+              <div class="rn-icon">🖥</div>
+              <div class="rn-label">Responder Gateway</div>
+              <div class="rn-status">● ONLINE</div>
+            </div>
+          </div>
+          <div id="relay-log"></div>
+        </div>
+      </div>
+
+      <!-- Zones -->
+      <div id="tab-zones" class="tab-panel">
+        <div class="zone-form">
+          <h3>Create Emergency Zone</h3>
+          <input id="zname"   type="text"   placeholder="Zone name" />
+          <input id="zlat"    type="number" placeholder="Latitude"  step="0.0001" value="12.9716" />
+          <input id="zlon"    type="number" placeholder="Longitude" step="0.0001" value="77.5946" />
+          <input id="zradius" type="number" placeholder="Radius (m)" value="3000" />
+          <button onclick="createZone()">Activate Zone</button>
+        </div>
+      </div>
+
+      <!-- Audit Log -->
+      <div id="tab-audit" class="tab-panel">
+        <div class="audit-header">
+          <span>AUDIT LOG</span>
+          <button onclick="loadAudit()">↺ Refresh</button>
+        </div>
+        <div id="audit-list"><div style="color:#aaa;text-align:center;padding:20px">No entries yet.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="./leaflet/leaflet.js"></script>
+<script>
+const API = 'http://localhost:8000';
+let currentUser  = null;
+let offlineMode  = false;
+let offlineQueue = [];
+let incidents    = {};
+let incidentMarkers = {};
+let ws  = null;
+let map = null;
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+document.getElementById('login-btn').addEventListener('click', doLogin);
+document.getElementById('lpassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+async function doLogin() {
+  const u   = document.getElementById('lusername').value.trim();
+  const p   = document.getElementById('lpassword').value;
+  const err = document.getElementById('login-error');
+  err.textContent = '';
+  try {
+    const r = await fetch(`${API}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p }),
+    });
+    if (!r.ok) { err.textContent = 'Invalid username or password.'; return; }
+    currentUser = await r.json();
+    document.getElementById('login-screen').style.display = 'none';
+    const appEl = document.getElementById('app');
+    appEl.style.display = 'flex';
+    document.getElementById('user-badge').textContent = `${currentUser.username}  [${currentUser.role}]`;
+    initMap();
+    connectWS();
+    loadIncidents();
+    loadZonesOnMap();
+  } catch (_) {
+    err.textContent = 'Cannot reach backend — is uvicorn running on port 8000?';
+  }
+}
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+  currentUser = null;
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('lpassword').value = '';
+  offlineMode = false;
+  offlineQueue = [];
+});
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+function initMap() {
+  if (map) return;
+  map = L.map('map').setView([12.9716, 77.5946], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+  }).addTo(map);
+}
+
+function incidentIcon(priority) {
+  const colours = { CRITICAL: '#c0392b', HIGH: '#e67e22', MEDIUM: '#2980b9', LOW: '#27ae60' };
+  const c = colours[priority] || '#888';
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:22px;height:22px;background:${c};border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>`,
+    iconAnchor: [11, 11],
+  });
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connectWS() {
+  if (ws && ws.readyState < 2) return;
+  ws = new WebSocket('ws://localhost:8000/ws/dashboard');
+  ws.onopen = () => { document.getElementById('conn-status').textContent = '🟢 Live'; };
+  ws.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch (_) { return; }
+    if (msg.type === 'event') addEventCard(msg);
+    if (msg.type === 'incident_update') loadIncidents();
+  };
+  ws.onclose = () => {
+    if (offlineMode) return;
+    document.getElementById('conn-status').textContent = '🔴 Reconnecting…';
+    setTimeout(connectWS, 3000);
+  };
+}
+
+setInterval(() => { if (ws && ws.readyState === 1) ws.send('ping'); }, 20000);
+
+// 30-second fallback refresh — keeps freshness badges and stats current even if WS drops
+setInterval(() => { if (currentUser) loadIncidents(); }, 30000);
+
+// ── Incidents ─────────────────────────────────────────────────────────────────
+async function loadIncidents() {
+  try {
+    const r = await fetch(`${API}/api/incidents`);
+    if (!r.ok) return;
+    const list = await r.json();
+    list.forEach(renderIncident);
+  } catch (_) {}
+}
+
+const FRESHNESS_COLORS = { Fresh: '#27ae60', Recent: '#2980b9', Aging: '#e67e22', Stale: '#c0392b' };
+
+function renderIncident(inc) {
+  incidents[inc.id] = inc;
+  const el = document.getElementById(`inc-${inc.id}`) || (() => {
+    const d = document.createElement('div');
+    d.id = `inc-${inc.id}`;
+    d.className = 'incident-card';
+    const container = document.getElementById('incident-list');
+    const empty = document.getElementById('empty-msg');
+    if (empty) empty.remove();
+    container.prepend(d);
+    return d;
+  })();
+
+  const pct = Math.round(inc.confidence * 100);
+  const fr  = inc.freshness || {};
+  const frColor = FRESHNESS_COLORS[fr.label] || '#888';
+  const age = fr.age_seconds != null
+    ? (fr.age_seconds < 60 ? `${fr.age_seconds}s ago` : `${Math.round(fr.age_seconds / 60)}m ago`)
+    : '';
+
+  el.innerHTML = `
+    <div class="header">
+      <span class="sector">📍 Sector ${inc.sector || '?'}</span>
+      <span class="priority-badge priority-${inc.priority}">${inc.priority}</span>
+    </div>
+    <div class="conf-bar"><div class="conf-fill" style="width:${pct}%"></div></div>
+    <div class="meta">
+      Confidence: <b>${pct}%</b> &nbsp;|&nbsp; Evidence: <b>${inc.event_count} device(s)</b>
+    </div>
+    <div class="meta" style="margin-top:3px">
+      Status: <b>${inc.status}</b> &nbsp;|&nbsp;
+      <span class="freshness-badge" style="background:${frColor}22;color:${frColor}">${fr.label || '—'}</span>
+      <span style="color:#bbb;font-size:.68rem"> ${age}</span>
+    </div>
+    <div style="font-size:.68rem;color:#ccc;margin-top:4px">${inc.id.slice(0, 16)}…</div>
+    ${inc.status === 'NEEDS_VERIFICATION'
+      ? `<button class="verify-btn" onclick="event.stopPropagation();verifyIncident('${inc.id}')">✓ Verify</button>`
+      : inc.status === 'VERIFIED'
+      ? `<span style="color:#27ae60;font-size:.78rem;font-weight:700;margin-top:6px;display:inline-block">✓ VERIFIED</span>
+         <button class="resolve-btn" onclick="event.stopPropagation();resolveIncident('${inc.id}')">✓ Resolve</button>`
+      : inc.status === 'RESOLVED'
+      ? `<span style="color:#8e44ad;font-size:.78rem;font-weight:700;display:block;margin-top:6px">✓ RESOLVED</span>`
+      : `<span style="color:#888;font-size:.78rem;display:block;margin-top:6px">${inc.status}</span>`}
+  `;
+  el.onclick = () => showEvidence(inc.id);
+  updateStats();
+
+  if (inc.lat && inc.lon) {
+    if (incidentMarkers[inc.id]) {
+      incidentMarkers[inc.id].setIcon(incidentIcon(inc.priority));
+    } else {
+      const m = L.marker([inc.lat, inc.lon], { icon: incidentIcon(inc.priority) })
+        .addTo(map)
+        .bindPopup(`<b>${inc.priority}</b><br>Sector ${inc.sector}<br>Confidence: ${pct}%`)
+        .on('click', () => {
+          const tabBtn = document.querySelector('.sidebar-tabs button');
+          switchTab('incidents', tabBtn);
+          setTimeout(() => {
+            const card = document.getElementById(`inc-${inc.id}`);
+            if (!card) return;
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            card.classList.add('highlighted');
+            setTimeout(() => card.classList.remove('highlighted'), 2000);
+          }, 120);
+        });
+      incidentMarkers[inc.id] = m;
+    }
+  }
+}
+
+async function showEvidence(incId) {
+  const existing = document.getElementById(`inc-${incId}`);
+  let evBox = document.getElementById(`ev-${incId}`);
+  if (evBox) { evBox.remove(); return; }
+  try {
+    const r = await fetch(`${API}/api/incidents/${incId}`);
+    if (!r.ok) return;
+    const inc = await r.json();
+    evBox = document.createElement('div');
+    evBox.id  = `ev-${incId}`;
+    evBox.className = 'evidence-box';
+    evBox.innerHTML = '<b>Evidence:</b><br>' + (inc.events || []).map(ev =>
+      `<div style="margin-top:5px">
+        📱 <b>${ev.device_id}</b> — ${ev.event_type} — conf ${(ev.confidence * 100).toFixed(0)}%
+        ${ev.offline_flag ? '<span style="color:#e67e22;font-size:.7rem">[offline sync]</span>' : ''}
+        <br><i style="color:#777">"${(ev.transcript || '').slice(0, 80)}"</i>
+       </div>`
+    ).join('');
+    existing.after(evBox);
+  } catch (_) {}
+}
+
+async function verifyIncident(id) {
+  try {
+    await fetch(`${API}/api/incidents/${id}/verify`, { method: 'PATCH' });
+    loadIncidents();
+  } catch (_) {}
+}
+
+// ── Events feed ───────────────────────────────────────────────────────────────
+function addEventCard(msg) {
+  const cls  = msg.classification || {};
+  const card = document.createElement('div');
+  card.className = 'event-card';
+  card.innerHTML = `
+    <div class="device">${(msg.event_id || '').slice(0, 8)}…</div>
+    <div class="transcript">"${(cls.keywords_found || []).join(', ') || 'no keywords'}"</div>
+    <div class="conf">type=${cls.event_type} | conf=${((cls.confidence || 0) * 100).toFixed(0)}% | ${cls.priority}</div>
+  `;
+  const list = document.getElementById('event-list');
+  list.prepend(card);
+  if (list.children.length > 50) list.lastChild.remove();
+}
+
+// ── Demo Control ──────────────────────────────────────────────────────────────
+async function generateEvent(type) {
+  if (offlineMode) {
+    offlineQueue.push({ event_type: type });
+    updateQueueUI();
+    const item = document.createElement('div');
+    item.className = 'queue-item';
+    item.textContent = `📦 ${type.toUpperCase()} queued`;
+    document.getElementById('offline-queue-list').prepend(item);
+    return;
+  }
+  try {
+    await fetch(`${API}/api/demo/generate-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_type: type, offline: false }),
+    });
+  } catch (_) {}
+}
+
+async function startScenario() {
+  const btn = document.getElementById('scenario-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Running scenario…';
+  try {
+    if (offlineMode) {
+      for (const t of ['help', 'trapped', 'knocking', 'noise', 'medical'])
+        await generateEvent(t);
+    } else {
+      await fetch(`${API}/api/demo/scenario`, { method: 'POST' });
+      loadIncidents();
+      loadAuditIfVisible();
+    }
+  } catch (_) {}
+  btn.disabled = false;
+  btn.textContent = '▶ START FULL SCENARIO';
+}
+
+function simulateConnectionLoss() {
+  offlineMode = true;
+  document.getElementById('offline-banner').style.display = 'flex';
+  document.getElementById('offline-sim-status').className = 'sim-status offline';
+  document.getElementById('offline-sim-status').innerHTML = '🔴 OFFLINE &nbsp;·&nbsp; <b id="queued-count">0</b> queued';
+  document.getElementById('btn-offline').disabled = true;
+  document.getElementById('btn-restore').disabled = false;
+  if (!offlineMode) return;
+  document.getElementById('conn-status').textContent = '🔴 Offline (simulated)';
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
+}
+
+async function restoreConnection() {
+  const btn = document.getElementById('btn-restore');
+  btn.disabled = true;
+  btn.textContent = '⏳ Syncing…';
+  try {
+    for (const ev of offlineQueue) {
+      await fetch(`${API}/api/demo/generate-event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_type: ev.event_type, offline: true }),
+      });
+    }
+    offlineQueue = [];
+    document.getElementById('offline-queue-list').innerHTML = '';
+  } catch (_) {}
+  offlineMode = false;
+  document.getElementById('offline-banner').style.display = 'none';
+  document.getElementById('offline-sim-status').className = 'sim-status online';
+  document.getElementById('offline-sim-status').innerHTML = '🟢 CONNECTED &nbsp;·&nbsp; <b id="queued-count">0</b> queued';
+  document.getElementById('btn-offline').disabled = false;
+  btn.disabled = true;
+  btn.textContent = '↺ RESTORE & SYNC';
+  connectWS();
+  loadIncidents();
+  loadAuditIfVisible();
+}
+
+function updateQueueUI() {
+  const n = offlineQueue.length;
+  const qc = document.getElementById('queued-count');
+  if (qc) qc.textContent = n;
+  const bc = document.getElementById('queue-count');
+  if (bc) bc.textContent = n;
+}
+
+async function clearAll() {
+  if (!confirm('Clear all incidents and events? This cannot be undone.')) return;
+  try {
+    await fetch(`${API}/api/demo/reset`, { method: 'POST' });
+    incidents = {};
+    Object.values(incidentMarkers).forEach(m => { try { map.removeLayer(m); } catch (_) {} });
+    incidentMarkers = {};
+    document.getElementById('incident-list').innerHTML =
+      '<div id="empty-msg">No incidents yet.<br>Use the <b>Demo ⚡</b> tab to generate alerts.</div>';
+    document.getElementById('event-list').innerHTML = '';
+    document.getElementById('audit-list').innerHTML =
+      '<div style="color:#aaa;text-align:center;padding:20px">No entries yet.</div>';
+  } catch (_) {}
+}
+
+async function resetDemo() {
+  if (!confirm('Reset all demo data? Clears zones, events, incidents, and audit log.')) return;
+  await clearAll();
+  offlineQueue = [];
+  offlineMode  = false;
+  document.getElementById('offline-banner').style.display = 'none';
+  document.getElementById('offline-sim-status').className = 'sim-status online';
+  document.getElementById('offline-sim-status').innerHTML = '🟢 CONNECTED &nbsp;·&nbsp; <b id="queued-count">0</b> queued';
+  document.getElementById('btn-offline').disabled = false;
+  document.getElementById('btn-restore').disabled = true;
+  document.getElementById('offline-queue-list').innerHTML = '';
+  updateQueueUI();
+}
+
+// ── Relay animation ───────────────────────────────────────────────────────────
+let relayAnimating = false;
+
+function animateRelay() {
+  if (relayAnimating) return;
+  relayAnimating = true;
+  const btn = document.getElementById('relay-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Relaying…';
+  document.getElementById('relay-log').innerHTML = '';
+  document.querySelectorAll('.relay-node').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.relay-arrow').forEach(a => a.classList.remove('active'));
+
+  const steps = [
+    { node: 'rn-a',  arrow: 'ra-1', msg: 'DEMO-01 captures distress audio — forwarding via Bluetooth LE…' },
+    { node: 'rn-b',  arrow: 'ra-2', msg: 'DEMO-02 relays signal via Bluetooth LE…' },
+    { node: 'rn-c',  arrow: 'ra-3', msg: 'DEMO-03 relays signal via Wi-Fi / LTE…' },
+    { node: 'rn-gw', arrow: null,   msg: 'Gateway receives signal — dispatching to backend…' },
+  ];
+
+  let i = 0;
+  const step = () => {
+    if (i >= steps.length) {
+      const done = document.createElement('div');
+      done.className = 'relay-log-entry success';
+      done.textContent = '✓ Signal delivered to Responder Dashboard';
+      document.getElementById('relay-log').prepend(done);
+      btn.disabled = false;
+      btn.textContent = '▶ ANIMATE RELAY';
+      relayAnimating = false;
+      return;
+    }
+    const s = steps[i];
+    document.getElementById(s.node).classList.add('active');
+    if (s.arrow) document.getElementById(s.arrow).classList.add('active');
+    const entry = document.createElement('div');
+    entry.className = 'relay-log-entry';
+    entry.textContent = s.msg;
+    document.getElementById('relay-log').prepend(entry);
+    i++;
+    setTimeout(step, 1100);
+  };
+  step();
+}
+
+// ── Zone creation ─────────────────────────────────────────────────────────────
+async function createZone() {
+  const body = {
+    name:     document.getElementById('zname').value || 'Zone Alpha',
+    lat:      parseFloat(document.getElementById('zlat').value),
+    lon:      parseFloat(document.getElementById('zlon').value),
+    radius_m: parseFloat(document.getElementById('zradius').value),
+  };
+  try {
+    const r = await fetch(`${API}/api/zones`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) { alert('Failed to create zone — is the backend running?'); return; }
+    const zone = await r.json();
+    alert(`Zone created!\nID: ${zone.id}\n\nFor simulator:\n  python device_simulator.py --zone-id ${zone.id}`);
+    if (map) L.circle([zone.lat, zone.lon], { radius: zone.radius_m, color: '#1a6b5a', fillOpacity: .1 }).addTo(map);
+  } catch (_) {
+    alert('Cannot reach backend — is uvicorn running on port 8000?');
+  }
+}
+
+// ── Stats bar ─────────────────────────────────────────────────────────────────
+function updateStats() {
+  const list = Object.values(incidents);
+  const by = p => list.filter(i => i.priority === p).length;
+  document.getElementById('stat-total').textContent    = list.length;
+  document.getElementById('stat-critical').textContent = by('CRITICAL');
+  document.getElementById('stat-high').textContent     = by('HIGH');
+  document.getElementById('stat-medium').textContent   = by('MEDIUM');
+  document.getElementById('stat-signals').textContent  = list.reduce((s, i) => s + (i.event_count || 0), 0);
+  document.getElementById('stat-verified').textContent = list.filter(i => i.status === 'VERIFIED' || i.status === 'RESOLVED').length;
+}
+
+// ── Resolve incident ──────────────────────────────────────────────────────────
+async function resolveIncident(id) {
+  try {
+    await fetch(`${API}/api/incidents/${id}/resolve`, { method: 'PATCH' });
+    loadIncidents();
+  } catch (_) {}
+}
+
+// ── Zone circles on map ───────────────────────────────────────────────────────
+let _zoneLayers = [];
+async function loadZonesOnMap() {
+  try {
+    const r = await fetch(`${API}/api/zones`);
+    if (!r.ok) return;
+    const zones = await r.json();
+    _zoneLayers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
+    _zoneLayers = [];
+    zones.forEach(z => {
+      const c = L.circle([z.lat, z.lon], {
+        radius: z.radius_m, color: '#1a6b5a', fillOpacity: .04, dashArray: '6 4', weight: 1.5,
+      }).addTo(map).bindPopup(`<b>${z.name}</b><br>Radius: ${z.radius_m}m`);
+      _zoneLayers.push(c);
+    });
+  } catch (_) {}
+}
+
+// ── Consented devices ─────────────────────────────────────────────────────────
+async function loadDevices() {
+  try {
+    const r = await fetch(`${API}/api/devices`);
+    if (!r.ok) return;
+    const devs = await r.json();
+    const list = document.getElementById('device-list');
+    if (!devs.length) { list.innerHTML = '<span style="color:#aaa">No consented devices yet</span>'; return; }
+    list.innerHTML = devs.map(d =>
+      `<div class="device-item">📱 ${d.device_id}</div>`
+    ).join('');
+  } catch (_) {}
+}
+
+// ── Audit log ─────────────────────────────────────────────────────────────────
+async function loadAudit() {
+  try {
+    const r = await fetch(`${API}/api/audit`);
+    if (!r.ok) return;
+    const logs = await r.json();
+    const list = document.getElementById('audit-list');
+    if (!logs.length) {
+      list.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px">No entries yet.</div>';
+      return;
+    }
+    list.innerHTML = logs.map(l => {
+      const t = (l.timestamp || '').slice(11, 19);
+      return `<div class="audit-entry">
+        <span class="audit-time">${t}</span>
+        <span class="audit-action">${l.action}</span>
+        <span class="audit-detail">${l.entity_type ? l.entity_type + ' · ' : ''}${(l.detail || '').slice(0, 50)}</span>
+      </div>`;
+    }).join('');
+  } catch (_) {}
+}
+
+function loadAuditIfVisible() {
+  const panel = document.getElementById('tab-audit');
+  if (panel && panel.classList.contains('active')) loadAudit();
+}
+
+// ── Tab switch ────────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sidebar-tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'audit') loadAudit();
+}
+</script>
+</body>
+</html>
