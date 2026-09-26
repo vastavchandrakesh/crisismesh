@@ -8,7 +8,7 @@ import asyncio
 from datetime import datetime
 from typing import Optional, List
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -105,6 +105,7 @@ class AudioEventRequest(BaseModel):
     lat: float
     lon: float
     offline_flag: bool = False
+    battery_pct: Optional[float] = None
 
 
 class OfflineSyncRequest(BaseModel):
@@ -120,6 +121,15 @@ class LoginRequest(BaseModel):
 class DemoEventRequest(BaseModel):
     event_type: str
     offline: bool = False
+
+
+class ResolveRequest(BaseModel):
+    triage: str = ""
+
+
+class BroadcastMessage(BaseModel):
+    message: str
+    severity: str = "warning"  # "info", "warning", "critical"
 
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -215,10 +225,19 @@ def list_zones():
 def list_devices():
     conn = get_conn()
     try:
-        rows = conn.execute(
-            "SELECT device_id, zone_id, consented_at FROM device_consents WHERE active=1 ORDER BY consented_at DESC LIMIT 50"
-        ).fetchall()
-        return [_row_to_dict(r) for r in rows]
+        rows = conn.execute("""
+            SELECT dc.device_id, dc.zone_id, dc.consented_at,
+                   ae.battery_pct, ae.timestamp as last_seen
+            FROM device_consents dc
+            LEFT JOIN audio_events ae ON ae.device_id = dc.device_id
+                AND ae.timestamp = (
+                    SELECT MAX(timestamp) FROM audio_events WHERE device_id = dc.device_id
+                )
+            WHERE dc.active = 1
+            GROUP BY dc.device_id
+            ORDER BY ae.timestamp DESC
+        """).fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
 
@@ -277,7 +296,10 @@ async def _process_event_inner(evt_req: AudioEventRequest, background: Backgroun
     event_id = str(uuid.uuid4())
     ts = _now()
     conn.execute(
-        """INSERT INTO audio_events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        """INSERT INTO audio_events
+           (id, device_id, zone_id, transcript, event_type, confidence, priority,
+            keywords, lat, lon, timestamp, is_distress, offline_flag, synced, battery_pct)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             event_id, evt_req.device_id, evt_req.zone_id,
             evt_req.transcript, result["event_type"],
@@ -287,6 +309,7 @@ async def _process_event_inner(evt_req: AudioEventRequest, background: Backgroun
             1 if result["is_distress"] else 0,
             1 if evt_req.offline_flag else 0,
             1,
+            evt_req.battery_pct,
         ),
     )
     _audit(conn, "EVENT_CREATED", evt_req.device_id, "audio_event", event_id,
@@ -340,7 +363,9 @@ async def _process_event_inner(evt_req: AudioEventRequest, background: Backgroun
         if not incident_id:
             incident_id = str(uuid.uuid4())
             conn.execute(
-                "INSERT INTO incidents VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                """INSERT INTO incidents
+                   (id, zone_id, sector, status, confidence, priority, event_count, lat, lon, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     incident_id, evt_req.zone_id,
                     sector_label(evt_req.lat, evt_req.lon),
@@ -400,15 +425,20 @@ async def sync_offline(body: OfflineSyncRequest, background: BackgroundTasks):
 
 # ─── Incidents ──────────────────────────────────────────────────────────────────
 @app.get("/api/incidents")
-def list_incidents(zone_id: Optional[str] = None):
+def list_incidents(zone_id: Optional[str] = None, show_dismissed: bool = False):
     conn = get_conn()
     try:
+        dismissed_filter = "" if show_dismissed else " AND status != 'DISMISSED'"
         if zone_id:
             rows = conn.execute(
-                "SELECT * FROM incidents WHERE zone_id=? ORDER BY confidence DESC", (zone_id,)
+                f"SELECT * FROM incidents WHERE zone_id=?{dismissed_filter} ORDER BY confidence DESC",
+                (zone_id,)
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM incidents ORDER BY confidence DESC").fetchall()
+            base_where = "" if show_dismissed else " WHERE status != 'DISMISSED'"
+            rows = conn.execute(
+                f"SELECT * FROM incidents{base_where} ORDER BY confidence DESC"
+            ).fetchall()
         result = []
         for r in rows:
             d = _row_to_dict(r)
@@ -432,9 +462,13 @@ def get_incident(incident_id: str):
                WHERE ie.incident_id=?""",
             (incident_id,),
         ).fetchall()
+        notes = conn.execute(
+            "SELECT * FROM incident_notes WHERE incident_id=? ORDER BY timestamp ASC",
+            (incident_id,)
+        ).fetchall()
         d = _row_to_dict(inc)
         d["freshness"] = _freshness(d.get("updated_at") or d.get("created_at", ""))
-        return {**d, "events": [_row_to_dict(e) for e in evs]}
+        return {**d, "events": [_row_to_dict(e) for e in evs], "notes": [dict(n) for n in notes]}
     finally:
         conn.close()
 
@@ -455,18 +489,132 @@ def verify_incident(incident_id: str):
 
 
 @app.patch("/api/incidents/{incident_id}/resolve")
-def resolve_incident(incident_id: str):
+def resolve_incident(incident_id: str, req: ResolveRequest = Body(default=ResolveRequest())):
     conn = get_conn()
     try:
         conn.execute(
-            "UPDATE incidents SET status='RESOLVED', updated_at=? WHERE id=?",
-            (_now(), incident_id),
+            "UPDATE incidents SET status='RESOLVED', triage=?, updated_at=? WHERE id=?",
+            (req.triage, datetime.utcnow().isoformat(), incident_id)
         )
-        _audit(conn, "INCIDENT_RESOLVED", "responder", "incident", incident_id)
+        _audit(conn, "INCIDENT_RESOLVED", "responder", "incident", incident_id,
+               f"triage={req.triage}")
         conn.commit()
     finally:
         conn.close()
-    return {"incident_id": incident_id, "status": "RESOLVED"}
+    return {"incident_id": incident_id, "status": "RESOLVED", "triage": req.triage}
+
+
+VALID_STATUSES = {"NEEDS_VERIFICATION", "VERIFIED", "TEAM_ASSIGNED", "EN_ROUTE", "RESOLVED", "DISMISSED"}
+
+
+class StatusUpdate(BaseModel):
+    status: str
+    team: str = ""
+
+
+class NoteRequest(BaseModel):
+    text: str
+    author: str = "responder"
+
+
+@app.patch("/api/incidents/{incident_id}/status")
+def update_incident_status(incident_id: str, body: StatusUpdate):
+    if body.status not in VALID_STATUSES:
+        raise HTTPException(400, f"Invalid status. Valid: {sorted(VALID_STATUSES)}")
+    conn = get_conn()
+    try:
+        now = _now()
+        conn.execute(
+            "UPDATE incidents SET status=?, team=?, updated_at=? WHERE id=?",
+            (body.status, body.team, now, incident_id),
+        )
+        _audit(conn, f"STATUS_{body.status}", "responder", "incident", incident_id, body.status)
+        conn.commit()
+    finally:
+        conn.close()
+    return {"incident_id": incident_id, "status": body.status, "team": body.team}
+
+
+@app.post("/api/incidents/{incident_id}/notes")
+async def add_incident_note(incident_id: str, req: NoteRequest):
+    conn = get_conn()
+    try:
+        now = datetime.utcnow().isoformat()
+        note_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO incident_notes (id, incident_id, text, author, timestamp) VALUES (?,?,?,?,?)",
+            (note_id, incident_id, req.text, req.author, now)
+        )
+        _audit(conn, "NOTE_ADDED", "responder", "incident", incident_id, req.text[:80])
+        conn.commit()
+        return {"id": note_id, "incident_id": incident_id, "text": req.text, "author": req.author, "timestamp": now}
+    finally:
+        conn.close()
+
+
+# ─── SOS endpoints ──────────────────────────────────────────────────────────────
+class SOSRequest(BaseModel):
+    lat: float = 12.9716
+    lon: float = 77.5946
+    type: str = "help"          # "help" or "report"
+    building: str = ""
+    floor: str = ""
+    room: str = ""
+    message: str = ""
+    audio_transcript: str = ""  # simulated audio transcript
+
+
+@app.post("/api/sos", status_code=201)
+async def submit_sos(body: SOSRequest, background: BackgroundTasks):
+    device_id = f"sos-{str(uuid.uuid4())[:8]}"
+
+    label = "I NEED HELP" if body.type == "help" else "REPORTING SOMEONE"
+    parts = [f"[DIRECT SOS: {label}]"]
+    if body.audio_transcript:
+        parts.append(body.audio_transcript)
+    elif body.message:
+        parts.append(body.message)
+    else:
+        parts.append("help" if body.type == "help" else "someone needs help")
+    if body.building:
+        parts.append(f"Building: {body.building}")
+    if body.floor:
+        parts.append(f"Floor: {body.floor}")
+    if body.room:
+        parts.append(f"Room: {body.room}")
+    transcript = " | ".join(parts)
+
+    conn = get_conn()
+    try:
+        zone_id = _get_or_create_demo_zone(conn)
+        conn.execute("INSERT OR REPLACE INTO device_consents VALUES (?,?,?,1)",
+                     (device_id, zone_id, _now()))
+        _audit(conn, "SOS_SUBMITTED", device_id, "sos", "", f"type={body.type}")
+        conn.commit()
+    finally:
+        conn.close()
+
+    req = AudioEventRequest(
+        device_id=device_id,
+        zone_id=zone_id,
+        transcript=transcript,
+        event_type_hint="verbal_distress",
+        lat=body.lat,
+        lon=body.lon,
+    )
+    return await _process_event(req, background)
+
+
+@app.post("/api/safe")
+async def mark_safe(background: BackgroundTasks):
+    conn = get_conn()
+    try:
+        _audit(conn, "MARKED_SAFE", "citizen", "safety_report", "", "self-reported safe")
+        conn.commit()
+    finally:
+        conn.close()
+    background.add_task(ws_manager.broadcast, {"type": "safety_report", "status": "safe"})
+    return {"status": "recorded", "message": "Safety status recorded"}
 
 
 # ─── Demo endpoints ─────────────────────────────────────────────────────────────
@@ -544,15 +692,40 @@ def demo_reset():
 
 # ─── Audit log ──────────────────────────────────────────────────────────────────
 @app.get("/api/audit")
-def list_audit():
+async def get_audit(incident_id: str = ""):
     conn = get_conn()
     try:
-        rows = conn.execute(
-            "SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 100"
-        ).fetchall()
-        return [_row_to_dict(r) for r in rows]
+        if incident_id:
+            rows = conn.execute(
+                "SELECT * FROM audit_logs WHERE entity_id=? ORDER BY timestamp DESC LIMIT 100",
+                (incident_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 100"
+            ).fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+# ─── Broadcast ──────────────────────────────────────────────────────────────────
+@app.post("/api/broadcast")
+async def broadcast_command(req: BroadcastMessage):
+    now = datetime.utcnow().isoformat()
+    await ws_manager.broadcast({
+        "type":      "broadcast",
+        "message":   req.message,
+        "severity":  req.severity,
+        "timestamp": now,
+    })
+    conn = get_conn()
+    try:
+        _audit(conn, "BROADCAST", "commander", "command", "", req.message[:120])
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True, "timestamp": now}
 
 
 # ─── Health ─────────────────────────────────────────────────────────────────────

@@ -46,6 +46,7 @@ def simulate(zone_id: str, base_url: str = BASE_URL):
             "event_type_hint": evt_type,
             "lat":             BASE_LAT + dlat,
             "lon":             BASE_LON + dlon,
+            "battery_pct":     random.uniform(20, 100),
         }
         resp = requests.post(f"{base_url}/api/events", json=payload)
         if resp.status_code == 201:

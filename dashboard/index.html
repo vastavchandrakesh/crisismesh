@@ -61,7 +61,7 @@
       color: #f5d18a; padding: 2px 10px; border-radius: 20px; font-size: .72rem; font-weight: 700;
     }
     #conn-status { font-size: .8rem; opacity: .85; }
-    .user-info { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .user-info { display: flex; align-items: center; gap: 10px; }
     #user-badge {
       background: rgba(255,255,255,.15); padding: 3px 10px;
       border-radius: 20px; font-size: .75rem; font-weight: 700;
@@ -259,10 +259,28 @@
     .device-list { font-size: .7rem; max-height: 70px; overflow-y: auto; margin-top: 4px; }
     .device-item { padding: 2px 8px; background: #f0f8f5; border-radius: 4px; margin-top: 3px; color: #1a6b5a; font-weight: 600; }
 
-    /* ── Resolve button ─────────────────────────────────────────────────── */
-    .resolve-btn { margin-top: 8px; margin-left: 6px; padding: 5px 14px; border: none; border-radius: 6px;
-      background: #8e44ad; color: #fff; cursor: pointer; font-size: .78rem; }
+    /* ── Dispatch workflow buttons ──────────────────────────────────────────── */
+    .workflow-btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .verify-btn, .resolve-btn, .workflow-btn {
+      padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: .78rem; font-weight: 700;
+    }
+    .verify-btn   { background: #1a6b5a; color: #fff; }
+    .verify-btn:hover { background: #145a4b; }
+    .resolve-btn  { background: #8e44ad; color: #fff; }
     .resolve-btn:hover { background: #7d3c98; }
+    .assign-btn   { background: #2980b9; color: #fff; }
+    .assign-btn:hover { background: #2471a3; }
+    .enroute-btn  { background: #e67e22; color: #fff; }
+    .enroute-btn:hover { background: #d35400; }
+    .sos-tag {
+      display: inline-block; background: #fdecea; color: #c0392b; border: 1px solid #f5b7b1;
+      border-radius: 4px; font-size: .65rem; font-weight: 700; padding: 1px 5px; margin-left: 4px;
+    }
+    .victim-portal-link {
+      color: #f5d18a; font-size: .72rem; text-decoration: none; padding: 3px 10px;
+      border: 1px solid rgba(245,209,138,.4); border-radius: 20px;
+    }
+    .victim-portal-link:hover { background: rgba(245,209,138,.15); }
 
     /* ── Incident highlight ─────────────────────────────────────────────── */
     .incident-card.highlighted { box-shadow: 0 0 0 3px #1a6b5a, 0 4px 16px rgba(26,107,90,.25); }
@@ -281,6 +299,27 @@
     .audit-time   { color: #aaa; font-variant-numeric: tabular-nums; flex-shrink: 0; }
     .audit-action { font-weight: 700; color: #1a6b5a; flex-shrink: 0; }
     .audit-detail { color: #777; word-break: break-all; }
+
+    .dismiss-btn  { background: #f0ece4; color: #888; border: 1px solid #ddd; }
+    .dismiss-btn:hover { background: #e5e0d8; color: #555; }
+
+    @keyframes escalationPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,0); border-color: #e5e0d8; }
+      50%       { box-shadow: 0 0 0 6px rgba(192,57,43,.35); border-color: #c0392b; }
+    }
+
+    .triage-opt:hover { opacity: .85; }
+
+    /* ── Print styles ───────────────────────────────────────────────────────── */
+    @media print {
+      body * { visibility: hidden !important; }
+      #print-target, #print-target * { visibility: visible !important; }
+      #print-target {
+        position: fixed !important; top: 0 !important; left: 0 !important;
+        width: 100% !important; background: #fff !important;
+        padding: 24px !important; font-size: 11pt !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -308,11 +347,34 @@
     📡 OFFLINE MODE — Events queued locally &nbsp;<span id="queue-count">0</span> pending
   </div>
 
+  <div id="broadcast-alert" style="
+    display:none;background:#c8922a;color:#fff;padding:10px 20px;
+    font-size:.85rem;font-weight:700;align-items:center;gap:10px;justify-content:center;
+    position:relative;
+  ">
+    <span id="broadcast-text"></span>
+    <button onclick="document.getElementById('broadcast-alert').style.display='none'"
+      style="position:absolute;right:14px;top:50%;transform:translateY(-50%);
+             background:transparent;border:1px solid rgba(255,255,255,.4);color:#fff;
+             padding:2px 8px;border-radius:4px;cursor:pointer;font-size:.72rem">✗</button>
+  </div>
+
   <header>
     <div class="brand-mark"></div>
     <h1>CRISISMESH</h1>
     <span class="mode-badge">DISASTER RESPONSE MODE</span>
+    <a class="victim-portal-link" href="victim.html" target="_blank">Victim Portal →</a>
     <span id="conn-status">⚪ Connecting…</span>
+    <div id="broadcast-bar" style="display:flex;gap:6px;margin-left:auto">
+      <input id="broadcast-input" type="text" placeholder="All-units broadcast…"
+        style="padding:4px 10px;border:1px solid rgba(255,255,255,.3);border-radius:6px;
+               background:rgba(255,255,255,.1);color:#fff;font-size:.78rem;width:220px;outline:none"
+        onkeydown="if(event.key==='Enter')sendBroadcast()"
+        onfocus="this.style.borderColor='#c8922a'" onblur="this.style.borderColor='rgba(255,255,255,.3)'" />
+      <button onclick="sendBroadcast()" style="
+        padding:4px 10px;background:#c8922a;border:none;border-radius:6px;
+        color:#fff;font-size:.75rem;font-weight:700;cursor:pointer">📢 Send</button>
+    </div>
     <div class="user-info">
       <span id="user-badge"></span>
       <button id="logout-btn">Sign Out</button>
@@ -329,7 +391,14 @@
   </div>
 
   <div class="main">
-    <div id="map"></div>
+    <div id="map" style="position:relative">
+      <button id="heatmap-btn" onclick="toggleHeatmap()" style="
+        position:absolute;top:10px;right:10px;z-index:1000;
+        background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:6px;
+        padding:6px 12px;font-size:.75rem;font-weight:700;cursor:pointer;color:#555;
+        box-shadow:0 2px 6px rgba(0,0,0,.15);
+      ">🌡 Heatmap OFF</button>
+    </div>
 
     <div class="sidebar">
       <div class="sidebar-tabs">
@@ -386,8 +455,8 @@
           <div class="demo-section-label">3-Minute Demo Script</div>
           <div class="demo-script">
             <div class="script-step"><span class="script-num">1</span>Click <b>START FULL SCENARIO</b> → 5 devices fire, 1 clustered incident appears on map</div>
-            <div class="script-step"><span class="script-num">2</span>Click the incident card → expand evidence (HELP + TRAPPED + KNOCKING fused)</div>
-            <div class="script-step"><span class="script-num">3</span>Click <b>✓ Verify</b> then <b>Resolve</b> to walk through the responder workflow</div>
+            <div class="script-step"><span class="script-num">2</span>Open <b>Victim Portal →</b> in new tab → submit "I Need Help" SOS form → report appears on dashboard</div>
+            <div class="script-step"><span class="script-num">3</span>Click the incident card → click <b>✓ Verify</b> → <b>👥 Assign Team</b> → <b>🚨 En Route</b> → <b>✓ Resolve</b></div>
             <div class="script-step"><span class="script-num">4</span>Click <b>SIMULATE LOSS</b> → generate 2 more events → watch them queue locally</div>
             <div class="script-step"><span class="script-num">5</span>Click <b>RESTORE &amp; SYNC</b> → offline events appear on dashboard with [offline sync] tag</div>
             <div class="script-step"><span class="script-num">6</span>Switch to <b>Relay</b> tab → click Animate to show the Bluetooth mesh relay chain</div>
@@ -484,6 +553,7 @@
 </div>
 
 <script src="./leaflet/leaflet.js"></script>
+<script src="./leaflet/leaflet-heat.js"></script>
 <script>
 const API = 'http://localhost:8000';
 let currentUser  = null;
@@ -516,6 +586,7 @@ async function doLogin() {
     appEl.style.display = 'flex';
     document.getElementById('user-badge').textContent = `${currentUser.username}  [${currentUser.role}]`;
     initMap();
+    requestNotificationPermission();
     connectWS();
     loadIncidents();
     loadZonesOnMap();
@@ -563,6 +634,7 @@ function connectWS() {
     try { msg = JSON.parse(e.data); } catch (_) { return; }
     if (msg.type === 'event') addEventCard(msg);
     if (msg.type === 'incident_update') loadIncidents();
+    if (msg.type === 'broadcast') showBroadcastAlert(msg.message);
   };
   ws.onclose = () => {
     if (offlineMode) return;
@@ -576,7 +648,57 @@ setInterval(() => { if (ws && ws.readyState === 1) ws.send('ping'); }, 20000);
 // 30-second fallback refresh — keeps freshness badges and stats current even if WS drops
 setInterval(() => { if (currentUser) loadIncidents(); }, 30000);
 
+// ── Auto-escalation notifications ─────────────────────────────────────────────
+const _notifiedEscalation = new Set();
+
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function checkEscalations() {
+  if (!currentUser) return;
+  Object.values(incidents).forEach(inc => {
+    if (inc.status !== 'NEEDS_VERIFICATION') return;
+    if (inc.priority !== 'CRITICAL' && inc.priority !== 'HIGH') return;
+    const age = inc.freshness && inc.freshness.age_seconds != null ? inc.freshness.age_seconds : 0;
+    if (age < 180) return; // under 3 minutes — not yet
+    if (_notifiedEscalation.has(inc.id)) return;
+    _notifiedEscalation.add(inc.id);
+    // Visual pulse
+    const card = document.getElementById(`inc-${inc.id}`);
+    if (card) {
+      card.style.animation = 'escalationPulse 1s ease-in-out 3';
+      setTimeout(() => { if (card) card.style.animation = ''; }, 3100);
+    }
+    // Browser notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('⚠ CrisisMesh Escalation', {
+        body: `${inc.priority} incident in Sector ${inc.sector || '?'} unverified for ${Math.round(age / 60)}m`,
+        icon: '',
+        tag: inc.id,
+      });
+    }
+  });
+}
+
+setInterval(checkEscalations, 30000);
+
 // ── Incidents ─────────────────────────────────────────────────────────────────
+function goldenCountdown(createdAt) {
+  if (!createdAt) return '';
+  const created  = new Date(createdAt.endsWith('Z') ? createdAt : createdAt + 'Z');
+  const deadline = new Date(created.getTime() + 72 * 3600 * 1000);
+  const rem      = deadline - Date.now();
+  if (rem <= 0) return `<span style="color:#c0392b;font-size:.68rem;font-weight:700">⏱ WINDOW EXPIRED</span>`;
+  const h = Math.floor(rem / 3600000);
+  const m = Math.floor((rem % 3600000) / 60000);
+  const color = h < 6 ? '#c0392b' : h < 24 ? '#e67e22' : '#888';
+  const urgency = h < 6 ? '🔴' : h < 24 ? '🟡' : '⏱';
+  return `<span style="color:${color};font-size:.68rem;font-weight:700">${urgency} ${h}h ${m}m remaining</span>`;
+}
+
 async function loadIncidents() {
   try {
     const r = await fetch(`${API}/api/incidents`);
@@ -622,18 +744,45 @@ function renderIncident(inc) {
       <span class="freshness-badge" style="background:${frColor}22;color:${frColor}">${fr.label || '—'}</span>
       <span style="color:#bbb;font-size:.68rem"> ${age}</span>
     </div>
-    <div style="font-size:.68rem;color:#ccc;margin-top:4px">${inc.id.slice(0, 16)}…</div>
+    <div style="margin-top:3px">${goldenCountdown(inc.created_at)}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+      <span style="font-size:.68rem;color:#ccc">${inc.id.slice(0, 16)}…</span>
+      <button onclick="event.stopPropagation();printReport('${inc.id}')" style="
+        background:transparent;border:1px solid #ddd;border-radius:4px;
+        padding:1px 7px;font-size:.65rem;color:#bbb;cursor:pointer
+      ">🖨 Print</button>
+    </div>
     ${inc.status === 'NEEDS_VERIFICATION'
-      ? `<button class="verify-btn" onclick="event.stopPropagation();verifyIncident('${inc.id}')">✓ Verify</button>`
+      ? `<div class="workflow-btns">
+           <button class="verify-btn workflow-btn" onclick="event.stopPropagation();verifyIncident('${inc.id}')">✓ Verify</button>
+           <button class="dismiss-btn workflow-btn" onclick="event.stopPropagation();dismissIncident('${inc.id}')">✗ False Positive</button>
+         </div>`
       : inc.status === 'VERIFIED'
       ? `<span style="color:#27ae60;font-size:.78rem;font-weight:700;margin-top:6px;display:inline-block">✓ VERIFIED</span>
-         <button class="resolve-btn" onclick="event.stopPropagation();resolveIncident('${inc.id}')">✓ Resolve</button>`
+         <div class="workflow-btns">
+           <button class="assign-btn workflow-btn" onclick="event.stopPropagation();updateStatus('${inc.id}','TEAM_ASSIGNED')">👥 Assign Team</button>
+           <button class="resolve-btn workflow-btn" onclick="event.stopPropagation();resolveIncident('${inc.id}')">✓ Resolve</button>
+           <button class="dismiss-btn workflow-btn" onclick="event.stopPropagation();dismissIncident('${inc.id}')">✗ Dismiss</button>
+         </div>`
+      : inc.status === 'TEAM_ASSIGNED'
+      ? `<span style="color:#2980b9;font-size:.78rem;font-weight:700;margin-top:6px;display:inline-block">👥 ${inc.team ? inc.team : 'TEAM ASSIGNED'}</span>
+         <div class="workflow-btns">
+           <button class="enroute-btn workflow-btn" onclick="event.stopPropagation();updateStatus('${inc.id}','EN_ROUTE')">🚨 En Route</button>
+           <button class="resolve-btn workflow-btn" onclick="event.stopPropagation();resolveIncident('${inc.id}')">✓ Resolve</button>
+         </div>`
+      : inc.status === 'EN_ROUTE'
+      ? `<span style="color:#e67e22;font-size:.78rem;font-weight:700;margin-top:6px;display:inline-block">🚨 EN ROUTE</span>
+         <div class="workflow-btns">
+           <button class="resolve-btn workflow-btn" onclick="event.stopPropagation();resolveIncident('${inc.id}')">✓ Resolve</button>
+         </div>`
       : inc.status === 'RESOLVED'
-      ? `<span style="color:#8e44ad;font-size:.78rem;font-weight:700;display:block;margin-top:6px">✓ RESOLVED</span>`
+      ? `<span style="color:#8e44ad;font-size:.78rem;font-weight:700;display:block;margin-top:6px">✓ RESOLVED ${inc.triage ? `<span style="background:#f4f4f4;color:#555;border-radius:4px;padding:1px 7px;font-size:.68rem;margin-left:4px">${inc.triage}</span>` : ''}</span>`
       : `<span style="color:#888;font-size:.78rem;display:block;margin-top:6px">${inc.status}</span>`}
   `;
   el.onclick = () => showEvidence(inc.id);
   updateStats();
+  applyZoneFilter();
+  updateHeatmap();
 
   if (inc.lat && inc.lon) {
     if (incidentMarkers[inc.id]) {
@@ -666,17 +815,87 @@ async function showEvidence(incId) {
     const r = await fetch(`${API}/api/incidents/${incId}`);
     if (!r.ok) return;
     const inc = await r.json();
+    // Fetch timeline from audit log
+    let timeline = [];
+    try {
+      const ar = await fetch(`${API}/api/audit?incident_id=${incId}`);
+      if (ar.ok) timeline = await ar.json();
+    } catch (_) {}
     evBox = document.createElement('div');
     evBox.id  = `ev-${incId}`;
     evBox.className = 'evidence-box';
-    evBox.innerHTML = '<b>Evidence:</b><br>' + (inc.events || []).map(ev =>
+    const evHtml = '<b>Evidence:</b><br>' + (inc.events || []).map(ev =>
       `<div style="margin-top:5px">
         📱 <b>${ev.device_id}</b> — ${ev.event_type} — conf ${(ev.confidence * 100).toFixed(0)}%
         ${ev.offline_flag ? '<span style="color:#e67e22;font-size:.7rem">[offline sync]</span>' : ''}
         <br><i style="color:#777">"${(ev.transcript || '').slice(0, 80)}"</i>
        </div>`
     ).join('');
+    const notes = inc.notes || [];
+    const notesHtml = `
+      <div style="margin-top:10px;border-top:1px solid #e5e0d8;padding-top:8px">
+        <b style="font-size:.75rem">Responder Notes:</b>
+        <div id="notes-${incId}" style="margin-top:4px">
+          ${notes.length ? notes.map(n =>
+            `<div style="background:#fff;border-radius:4px;padding:4px 8px;margin-top:3px;font-size:.72rem">
+              <span style="color:#888">${(n.timestamp||'').slice(11,16)}</span>
+              <span style="font-weight:700;color:#1a6b5a"> ${n.author}:</span>
+              <span style="color:#555"> ${n.text}</span>
+             </div>`
+          ).join('') : '<span style="color:#bbb;font-size:.72rem">No notes yet.</span>'}
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <input id="note-input-${incId}" type="text" placeholder="Add a note…"
+            style="flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:.78rem;font-family:inherit"
+            onkeydown="if(event.key==='Enter'){event.stopPropagation();submitNote('${incId}')}" />
+          <button onclick="event.stopPropagation();submitNote('${incId}')"
+            style="padding:5px 10px;background:#1a6b5a;color:#fff;border:none;border-radius:5px;font-size:.75rem;cursor:pointer">Add</button>
+        </div>
+      </div>`;
+    const timelineHtml = timeline.length ? `
+      <div style="margin-top:10px;border-top:1px solid #e5e0d8;padding-top:8px">
+        <b style="font-size:.75rem">Incident Timeline:</b>
+        <div style="margin-top:6px;position:relative;padding-left:16px">
+          <div style="position:absolute;left:5px;top:0;bottom:0;width:2px;background:#e5e0d8;border-radius:1px"></div>
+          ${timeline.slice().reverse().map(e => `
+            <div style="position:relative;margin-bottom:8px;font-size:.72rem">
+              <div style="position:absolute;left:-13px;top:3px;width:8px;height:8px;border-radius:50%;background:#1a6b5a;border:2px solid #fff;box-shadow:0 0 0 1px #1a6b5a"></div>
+              <span style="color:#aaa">${(e.timestamp||'').slice(11,16)}</span>
+              <span style="font-weight:700;color:#1a6b5a;margin-left:4px">${e.action}</span>
+              <span style="color:#777;margin-left:4px">${(e.detail||'').slice(0,50)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>` : '';
+    evBox.innerHTML = evHtml + notesHtml + timelineHtml;
     existing.after(evBox);
+  } catch (_) {}
+}
+
+async function submitNote(incId) {
+  const input = document.getElementById(`note-input-${incId}`);
+  if (!input || !input.value.trim()) return;
+  const text = input.value.trim();
+  const author = currentUser ? currentUser.username : 'responder';
+  try {
+    const r = await fetch(`${API}/api/incidents/${incId}/notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, author }),
+    });
+    if (!r.ok) return;
+    const note = await r.json();
+    input.value = '';
+    const container = document.getElementById(`notes-${incId}`);
+    if (container) {
+      const entry = document.createElement('div');
+      entry.style.cssText = 'background:#fff;border-radius:4px;padding:4px 8px;margin-top:3px;font-size:.72rem';
+      entry.innerHTML = `<span style="color:#888">${note.timestamp.slice(11,16)}</span>
+        <span style="font-weight:700;color:#1a6b5a"> ${note.author}:</span>
+        <span style="color:#555"> ${note.text}</span>`;
+      if (container.querySelector('span[style*="bbb"]')) container.innerHTML = '';
+      container.appendChild(entry);
+    }
   } catch (_) {}
 }
 
@@ -898,14 +1117,154 @@ function updateStats() {
 
 // ── Resolve incident ──────────────────────────────────────────────────────────
 async function resolveIncident(id) {
+  // Show triage modal
+  const triage = await showTriageModal();
+  if (triage === null) return; // user cancelled
   try {
-    await fetch(`${API}/api/incidents/${id}/resolve`, { method: 'PATCH' });
+    await fetch(`${API}/api/incidents/${id}/resolve`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ triage }),
+    });
     loadIncidents();
   } catch (_) {}
 }
 
+function showTriageModal() {
+  return new Promise(resolve => {
+    // Remove any existing modal
+    const existing = document.getElementById('triage-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'triage-modal';
+    modal.style.cssText = `
+      position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.5);
+      display:flex;align-items:center;justify-content:center;
+    `;
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:14px;padding:28px 24px;width:320px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-weight:700;font-size:1rem;color:#1a6b5a;margin-bottom:4px">START Triage Outcome</div>
+        <div style="font-size:.78rem;color:#888;margin-bottom:18px">How was this victim classified on scene?</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="triage-opt" data-val="Immediate"   style="background:#fdecea;color:#c0392b;border:2px solid #f5b7b1">🔴 Immediate — Life-threatening, treat now</button>
+          <button class="triage-opt" data-val="Delayed"     style="background:#fef9e7;color:#d4ac0d;border:2px solid #f9e79f">🟡 Delayed — Serious but stable</button>
+          <button class="triage-opt" data-val="Minor"       style="background:#eafaf1;color:#27ae60;border:2px solid #a9dfbf">🟢 Minor — Walking wounded</button>
+          <button class="triage-opt" data-val="Expectant"   style="background:#f4f4f4;color:#555;border:2px solid #ccc">⚫ Expectant — Unsurvivable injuries</button>
+          <button class="triage-opt" data-val="Not Found"   style="background:#eaf4fd;color:#2980b9;border:2px solid #aed6f1">❌ Not Found — Location cleared</button>
+        </div>
+        <button id="triage-cancel" style="margin-top:14px;width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;background:#f5f0e8;cursor:pointer;font-size:.82rem;color:#888">Cancel</button>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.querySelectorAll('.triage-opt').forEach(btn => {
+      btn.style.cssText += ';padding:10px 14px;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600;text-align:left;';
+      btn.addEventListener('click', () => {
+        modal.remove();
+        resolve(btn.dataset.val);
+      });
+    });
+    document.getElementById('triage-cancel').addEventListener('click', () => {
+      modal.remove();
+      resolve(null);
+    });
+  });
+}
+
+async function dismissIncident(id) {
+  if (!confirm('Mark this incident as a false positive? It will be hidden from the active list.')) return;
+  try {
+    await fetch(`${API}/api/incidents/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'DISMISSED' }),
+    });
+    // Remove from local cache and DOM
+    delete incidents[id];
+    const card = document.getElementById(`inc-${id}`);
+    if (card) card.remove();
+    const ev = document.getElementById(`ev-${id}`);
+    if (ev) ev.remove();
+    if (incidentMarkers[id]) { try { map.removeLayer(incidentMarkers[id]); } catch (_) {} delete incidentMarkers[id]; }
+    updateStats();
+    const list = document.getElementById('incident-list');
+    if (!list.querySelector('.incident-card')) {
+      list.innerHTML = '<div id="empty-msg">No incidents yet.<br>Use the <b>Demo ⚡</b> tab to generate alerts.</div>';
+    }
+  } catch (_) {}
+}
+
+// ── Generic status update ─────────────────────────────────────────────────────
+async function updateStatus(id, newStatus) {
+  let team = '';
+  if (newStatus === 'TEAM_ASSIGNED') {
+    const callsign = prompt('Enter team callsign (e.g. TEAM-ALPHA):', 'TEAM-ALPHA');
+    if (callsign === null) return; // user cancelled
+    team = callsign.trim() || 'TEAM-ALPHA';
+  }
+  try {
+    await fetch(`${API}/api/incidents/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus, team }),
+    });
+    loadIncidents();
+  } catch (_) {}
+}
+
+// ── Command broadcast ─────────────────────────────────────────────────────────
+async function sendBroadcast() {
+  const input = document.getElementById('broadcast-input');
+  const msg = input ? input.value.trim() : '';
+  if (!msg) return;
+  try {
+    await fetch(`${API}/api/broadcast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, severity: 'warning' }),
+    });
+    input.value = '';
+  } catch (_) {
+    // Show locally even if backend is down
+    showBroadcastAlert(msg);
+  }
+}
+
+function showBroadcastAlert(message) {
+  const bar = document.getElementById('broadcast-alert');
+  const txt = document.getElementById('broadcast-text');
+  if (!bar || !txt) return;
+  txt.textContent = '📢 ALL UNITS: ' + message;
+  bar.style.display = 'flex';
+  setTimeout(() => { bar.style.display = 'none'; }, 15000);
+}
+
+// ── Print report ──────────────────────────────────────────────────────────────
+function printReport(incId) {
+  const card = document.getElementById(`inc-${incId}`);
+  const ev   = document.getElementById(`ev-${incId}`);
+  if (!card) return;
+  // Clone card + evidence into a print-only div
+  const prev = document.getElementById('print-target');
+  if (prev) prev.remove();
+  const pt = document.createElement('div');
+  pt.id = 'print-target';
+  pt.style.cssText = 'display:none';
+  const header = document.createElement('div');
+  header.innerHTML = `<h2 style="color:#1a6b5a;margin-bottom:4px">CrisisMesh — Incident Report</h2>
+    <p style="color:#888;font-size:.85em">Printed: ${new Date().toLocaleString()}</p><hr style="margin:10px 0">`;
+  pt.appendChild(header);
+  pt.appendChild(card.cloneNode(true));
+  if (ev) pt.appendChild(ev.cloneNode(true));
+  document.body.appendChild(pt);
+  window.print();
+}
+
 // ── Zone circles on map ───────────────────────────────────────────────────────
 let _zoneLayers = [];
+let _activeZoneFilter = null;
+
 async function loadZonesOnMap() {
   try {
     const r = await fetch(`${API}/api/zones`);
@@ -916,10 +1275,81 @@ async function loadZonesOnMap() {
     zones.forEach(z => {
       const c = L.circle([z.lat, z.lon], {
         radius: z.radius_m, color: '#1a6b5a', fillOpacity: .04, dashArray: '6 4', weight: 1.5,
-      }).addTo(map).bindPopup(`<b>${z.name}</b><br>Radius: ${z.radius_m}m`);
+      }).addTo(map).bindPopup(`<b>${z.name}</b><br>Radius: ${z.radius_m}m<br><small>Click to filter incidents</small>`)
+        .on('click', () => {
+          if (_activeZoneFilter === z.id) {
+            _activeZoneFilter = null;
+            c.setStyle({ color: '#1a6b5a', weight: 1.5 });
+            document.getElementById('zone-filter-banner') && document.getElementById('zone-filter-banner').remove();
+          } else {
+            _activeZoneFilter = z.id;
+            _zoneLayers.forEach(l => l.setStyle({ color: '#1a6b5a', weight: 1.5 }));
+            c.setStyle({ color: '#e67e22', weight: 3 });
+            let banner = document.getElementById('zone-filter-banner');
+            if (!banner) {
+              banner = document.createElement('div');
+              banner.id = 'zone-filter-banner';
+              banner.style.cssText = 'background:#fef5e7;border-bottom:1px solid #fad7a0;padding:5px 14px;font-size:.75rem;font-weight:700;color:#e67e22;display:flex;align-items:center;gap:8px;';
+              banner.innerHTML = `<span>Filtering: ${z.name}</span><button onclick="clearZoneFilter()" style="margin-left:auto;background:transparent;border:1px solid #fad7a0;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:.72rem;color:#e67e22">✗ Clear filter</button>`;
+              document.getElementById('tab-incidents').prepend(banner);
+            } else {
+              banner.querySelector('span').textContent = `Filtering: ${z.name}`;
+            }
+          }
+          applyZoneFilter();
+        });
       _zoneLayers.push(c);
     });
   } catch (_) {}
+}
+
+function clearZoneFilter() {
+  _activeZoneFilter = null;
+  _zoneLayers.forEach(l => l.setStyle({ color: '#1a6b5a', weight: 1.5 }));
+  const banner = document.getElementById('zone-filter-banner');
+  if (banner) banner.remove();
+  applyZoneFilter();
+}
+
+function applyZoneFilter() {
+  document.querySelectorAll('.incident-card').forEach(card => {
+    const incId = card.id.replace('inc-', '');
+    const inc = incidents[incId];
+    if (!inc) return;
+    card.style.display = (_activeZoneFilter && inc.zone_id !== _activeZoneFilter) ? 'none' : '';
+  });
+}
+
+// ── Heatmap ───────────────────────────────────────────────────────────────────
+let _heatLayer = null;
+let _heatmapOn = false;
+
+function toggleHeatmap() {
+  _heatmapOn = !_heatmapOn;
+  const btn = document.getElementById('heatmap-btn');
+  if (_heatmapOn) {
+    btn.textContent = '🌡 Heatmap ON';
+    btn.style.background = '#fdecea';
+    btn.style.color = '#c0392b';
+    btn.style.borderColor = '#f5b7b1';
+    updateHeatmap();
+  } else {
+    btn.textContent = '🌡 Heatmap OFF';
+    btn.style.background = '#fff';
+    btn.style.color = '#555';
+    btn.style.borderColor = 'rgba(0,0,0,.2)';
+    if (_heatLayer) { try { map.removeLayer(_heatLayer); } catch (_) {} _heatLayer = null; }
+  }
+}
+
+function updateHeatmap() {
+  if (!_heatmapOn || !map) return;
+  const points = Object.values(incidents)
+    .filter(i => i.lat && i.lon && i.status !== 'DISMISSED')
+    .map(i => [i.lat, i.lon, Math.min(i.confidence, 1.0)]);
+  if (_heatLayer) { try { map.removeLayer(_heatLayer); } catch (_) {} }
+  if (!points.length) return;
+  _heatLayer = L.heatLayer(points, { radius: 35, blur: 20, maxZoom: 17 }).addTo(map);
 }
 
 // ── Consented devices ─────────────────────────────────────────────────────────
@@ -930,9 +1360,20 @@ async function loadDevices() {
     const devs = await r.json();
     const list = document.getElementById('device-list');
     if (!devs.length) { list.innerHTML = '<span style="color:#aaa">No consented devices yet</span>'; return; }
-    list.innerHTML = devs.map(d =>
-      `<div class="device-item">📱 ${d.device_id}</div>`
-    ).join('');
+    list.innerHTML = devs.map(d => {
+      const bat = d.battery_pct != null ? d.battery_pct : null;
+      const batColor = bat == null ? '#ccc' : bat > 30 ? '#27ae60' : bat > 10 ? '#e67e22' : '#c0392b';
+      const batBar = bat != null
+        ? `<div style="width:36px;height:6px;background:#eee;border-radius:3px;display:inline-block;vertical-align:middle;margin-left:4px">
+             <div style="width:${bat}%;height:100%;background:${batColor};border-radius:3px"></div>
+           </div>
+           <span style="font-size:.65rem;color:${batColor};margin-left:3px">${Math.round(bat)}%</span>`
+        : '';
+      const lastSeen = d.last_seen
+        ? `<span style="color:#bbb;font-size:.65rem;margin-left:4px">${d.last_seen.slice(11,19)}</span>`
+        : '';
+      return `<div class="device-item">📱 ${d.device_id}${batBar}${lastSeen}</div>`;
+    }).join('');
   } catch (_) {}
 }
 

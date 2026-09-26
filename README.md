@@ -104,6 +104,10 @@ Interactive API docs: `http://localhost:8000/docs`
 
 Open `dashboard/index.html` directly in a browser. No build step required.
 
+### Open the victim portal
+
+Open `dashboard/victim.html` in a browser (best on mobile or a narrow window). Works offline — reports queue in localStorage and retry automatically.
+
 > Leaflet is bundled locally in `dashboard/leaflet/` so the map loads without internet.  
 > Map tiles (the actual street imagery) still require an internet connection.
 
@@ -123,14 +127,15 @@ These are hardcoded demo credentials. There is no production authentication syst
 ## 3-Minute Demo Walkthrough
 
 1. Open `dashboard/index.html` → sign in as `responder / demo123`
-2. Switch to the **Demo ⚡** tab
-3. Click **START FULL SCENARIO** — 5 simulated devices fire alerts; 1 clustered incident appears on the map and sidebar
-4. Click the incident card to expand evidence (HELP + TRAPPED + KNOCKING fused into one incident)
-5. Click **✓ Verify** then **Resolve** to walk through the responder workflow
-6. Click **SIMULATE CONNECTION LOSS** → generate 2 more events → watch them queue locally
-7. Click **RESTORE & SYNC** → offline events appear on the dashboard tagged `[offline sync]`
-8. Switch to the **Relay** tab → click **ANIMATE RELAY** to show the Bluetooth mesh relay chain
-9. Switch to the **Audit** tab → show the complete consent + event + verification trail
+2. Switch to the **Demo ⚡** tab → click **START FULL SCENARIO** — 5 simulated devices fire; 1 clustered incident appears
+3. Click **Victim Portal →** in the header — opens `victim.html` in a new tab
+4. Tap **I Need Help** → fill in a floor/room → tap **SEND EMERGENCY REPORT** → see "Report Delivered ✓"
+5. Return to the dashboard → the SOS appears as a new incident
+6. On the incident card: click **✓ Verify** → **👥 Assign Team** → **🚨 En Route** → **✓ Resolve** (full dispatch workflow)
+7. Click **SIMULATE CONNECTION LOSS** → generate 2 more events → watch them queue locally
+8. Click **RESTORE & SYNC** → offline events appear on the dashboard tagged `[offline sync]`
+9. Switch to the **Relay** tab → click **ANIMATE RELAY** to show the Bluetooth mesh relay chain
+10. Switch to the **Audit** tab → show the complete consent + event + verification trail
 
 ### Simulator (alternative to the Demo tab)
 
@@ -191,6 +196,9 @@ Expected result: **1 CRITICAL incident** fusing devices 01, 02, 03, 05. Device 0
 | GET | `/api/incidents/{id}` | Get incident + evidence events |
 | PATCH | `/api/incidents/{id}/verify` | Mark incident VERIFIED |
 | PATCH | `/api/incidents/{id}/resolve` | Mark incident RESOLVED |
+| PATCH | `/api/incidents/{id}/status` | Advance status (TEAM_ASSIGNED, EN_ROUTE, etc.) |
+| POST | `/api/sos` | Submit victim SOS from the victim portal |
+| POST | `/api/safe` | Mark caller safe (victim portal) |
 | POST | `/api/demo/generate-event` | Generate a single typed demo event |
 | POST | `/api/demo/scenario` | Run full building collapse scenario |
 | POST | `/api/demo/reset` | Clear all demo data |
@@ -304,7 +312,8 @@ crisismesh/
 │   ├── requirements.txt
 │   └── crisismesh.db    — SQLite database (auto-created on first run)
 ├── dashboard/
-│   ├── index.html       — Single-file frontend (map, incidents, demo panel)
+│   ├── index.html       — Responder dashboard (map, incidents, demo panel, dispatch workflow)
+│   ├── victim.html      — Mobile-first victim/witness portal (SOS form, offline queue, I'm Safe)
 │   └── leaflet/         — Leaflet 1.9.4 bundled locally
 ├── simulator/
 │   └── device_simulator.py — Terminal-based demo traffic generator

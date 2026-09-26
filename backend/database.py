@@ -89,6 +89,27 @@ def init_db():
             detail       TEXT DEFAULT '',
             timestamp    TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS incident_notes (
+            id          TEXT PRIMARY KEY,
+            incident_id TEXT NOT NULL,
+            text        TEXT NOT NULL,
+            author      TEXT DEFAULT 'responder',
+            timestamp   TEXT NOT NULL
+        );
     """)
     conn.commit()
+
+    # Safely add columns that may not exist in older DBs
+    for sql in [
+        "ALTER TABLE audio_events ADD COLUMN battery_pct REAL DEFAULT NULL",
+        "ALTER TABLE incidents    ADD COLUMN team         TEXT DEFAULT ''",
+        "ALTER TABLE incidents ADD COLUMN triage TEXT DEFAULT ''",
+    ]:
+        try:
+            conn.execute(sql)
+            conn.commit()
+        except Exception:
+            pass
+
     conn.close()

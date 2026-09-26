@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>CrisisMesh — Emergency</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --red:   #c0392b;
+      --green: #27ae60;
+      --blue:  #2980b9;
+      --teal:  #1a6b5a;
+      --bg:    #f5f0e8;
+      --text:  #222;
+    }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Segoe UI', sans-serif; background: var(--bg);
+      color: var(--text); display: flex; flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--teal); color: #fff; padding: 12px 18px;
+      display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+    }
+    .brand-bar { width: 6px; height: 24px; background: #c8922a; border-radius: 3px; }
+    header h1 { font-size: 1rem; letter-spacing: 2px; }
+    .mode-pill {
+      margin-left: auto; background: rgba(200,146,42,.3); border: 1px solid #c8922a;
+      color: #f5d18a; padding: 2px 10px; border-radius: 20px; font-size: .7rem; font-weight: 700;
+    }
+    .back-btn {
+      background: transparent; border: none; color: #fff; font-size: 1rem;
+      cursor: pointer; padding: 4px 8px; margin-right: 4px;
+    }
+
+    /* ── Screens ── */
+    .screen { display: none; flex: 1; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ── Main action screen ── */
+    #screen-main {
+      padding: 28px 20px 20px; gap: 16px; align-items: stretch;
+    }
+    .main-intro { text-align: center; margin-bottom: 8px; }
+    .main-intro h2 { font-size: 1.1rem; color: var(--teal); font-weight: 700; }
+    .main-intro p  { font-size: .82rem; color: #777; margin-top: 4px; }
+
+    .action-btn {
+      border: none; border-radius: 14px; padding: 22px 20px;
+      font-size: 1.15rem; font-weight: 700; color: #fff; cursor: pointer;
+      display: flex; align-items: center; gap: 14px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.18);
+      transition: transform .1s, box-shadow .1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .action-btn:active { transform: scale(.97); box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+    .action-btn .icon { font-size: 1.8rem; line-height: 1; }
+    .action-btn .label { text-align: left; }
+    .action-btn .label small { display: block; font-size: .72rem; font-weight: 400; opacity: .85; margin-top: 2px; }
+    .btn-red   { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+    .btn-green { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+    .btn-blue  { background: linear-gradient(135deg, #3498db, #2980b9); }
+
+    .privacy-note {
+      text-align: center; font-size: .7rem; color: #aaa; margin-top: 8px;
+      padding: 0 10px;
+    }
+    .responder-link { text-align: center; margin-top: 12px; }
+    .responder-link a { font-size: .75rem; color: var(--teal); text-decoration: none; }
+
+    /* ── SOS Form screen ── */
+    #screen-form { padding: 0; overflow-y: auto; }
+    .form-body { padding: 16px 18px 32px; display: flex; flex-direction: column; gap: 16px; }
+    .sos-type-badge {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;
+      border-radius: 20px; font-size: .82rem; font-weight: 700; align-self: flex-start;
+    }
+    .badge-red  { background: #fdecea; color: var(--red); }
+    .badge-blue { background: #eaf4fd; color: var(--blue); }
+
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: .78rem; font-weight: 700; color: #555; }
+    .form-group input, .form-group textarea {
+      padding: 12px 14px; border: 1.5px solid #ddd; border-radius: 10px;
+      font-size: .95rem; font-family: inherit; background: #fff; outline: none;
+    }
+    .form-group input:focus, .form-group textarea:focus { border-color: var(--teal); }
+    .form-group textarea { resize: none; height: 80px; }
+
+    .location-row { display: flex; gap: 8px; align-items: center; }
+    .loc-btn {
+      padding: 10px 14px; background: var(--teal); color: #fff; border: none;
+      border-radius: 10px; font-size: .82rem; font-weight: 700; cursor: pointer; flex-shrink: 0;
+    }
+    .loc-btn:disabled { opacity: .5; cursor: not-allowed; }
+    #location-status { font-size: .75rem; color: #888; flex: 1; }
+    #location-status.ok    { color: var(--green); font-weight: 700; }
+    #location-status.error { color: var(--red); }
+
+    /* ── Audio section ── */
+    .audio-section {
+      background: #fff; border: 1.5px solid #e5e0d8; border-radius: 10px; padding: 14px;
+    }
+    .audio-section label { font-size: .78rem; font-weight: 700; color: #555; display: block; margin-bottom: 8px; }
+    .audio-section small { font-size: .7rem; color: #aaa; display: block; margin-top: 4px; }
+    #audio-start-btn {
+      padding: 10px 18px; background: #eaf4fd; color: var(--blue); border: 1.5px solid #aed6f1;
+      border-radius: 8px; font-weight: 700; font-size: .85rem; cursor: pointer; width: 100%;
+    }
+    #audio-start-btn.recording { background: #fdecea; color: var(--red); border-color: #f5b7b1; }
+    .waveform {
+      display: flex; align-items: center; gap: 3px; height: 28px;
+      justify-content: center; margin: 8px 0;
+    }
+    .waveform span {
+      display: inline-block; width: 4px; border-radius: 2px; background: var(--red);
+      animation: wave .8s ease-in-out infinite;
+    }
+    .waveform span:nth-child(2) { animation-delay: .1s; }
+    .waveform span:nth-child(3) { animation-delay: .2s; }
+    .waveform span:nth-child(4) { animation-delay: .3s; }
+    .waveform span:nth-child(5) { animation-delay: .4s; }
+    .waveform span:nth-child(6) { animation-delay: .3s; }
+    .waveform span:nth-child(7) { animation-delay: .2s; }
+    @keyframes wave {
+      0%, 100% { height: 6px; }
+      50%       { height: 22px; }
+    }
+    #audio-timer { font-size: .78rem; color: #888; text-align: center; }
+    #audio-done { font-size: .78rem; color: var(--green); font-weight: 700; margin-top: 4px; }
+
+    /* ── Submit section ── */
+    .submit-area { display: flex; flex-direction: column; gap: 10px; }
+    #send-btn {
+      padding: 16px; background: var(--red); color: #fff; border: none;
+      border-radius: 12px; font-size: 1.05rem; font-weight: 700; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(192,57,43,.3);
+    }
+    #send-btn.safe { background: var(--green); box-shadow: 0 4px 12px rgba(39,174,96,.3); }
+    #send-btn:disabled { opacity: .6; cursor: not-allowed; }
+    #cancel-btn {
+      padding: 13px; background: #f5f0e8; border: 1.5px solid #ddd; border-radius: 12px;
+      font-size: .9rem; font-weight: 600; cursor: pointer; color: #666;
+    }
+    #submit-status {
+      font-size: .8rem; text-align: center; min-height: 18px; font-weight: 600;
+    }
+    #submit-status.sending { color: var(--blue); }
+    #submit-status.error   { color: var(--red); }
+
+    .form-disclaimer {
+      font-size: .7rem; color: #bbb; text-align: center;
+      border-top: 1px solid #ece8e0; padding-top: 12px;
+    }
+
+    /* ── Success screen ── */
+    #screen-success {
+      padding: 40px 24px; align-items: center; justify-content: center;
+      text-align: center; gap: 16px;
+    }
+    .success-circle {
+      width: 90px; height: 90px; border-radius: 50%;
+      background: var(--green); display: flex; align-items: center; justify-content: center;
+      font-size: 2.5rem; color: #fff; box-shadow: 0 6px 20px rgba(39,174,96,.35);
+    }
+    #screen-success h2 { font-size: 1.4rem; color: var(--teal); }
+    #screen-success p  { font-size: .88rem; color: #666; max-width: 280px; }
+    #report-id { font-size: .72rem; color: #bbb; }
+
+    /* ── Offline screen ── */
+    #screen-offline {
+      padding: 40px 24px; align-items: center; justify-content: center;
+      text-align: center; gap: 16px;
+    }
+    .offline-circle {
+      width: 90px; height: 90px; border-radius: 50%;
+      background: #e67e22; display: flex; align-items: center; justify-content: center;
+      font-size: 2.5rem; color: #fff; box-shadow: 0 6px 20px rgba(230,126,34,.35);
+    }
+    #screen-offline h2 { font-size: 1.3rem; color: #e67e22; }
+    #screen-offline p  { font-size: .85rem; color: #666; max-width: 290px; }
+    .offline-detail {
+      background: #fff3e0; border-radius: 10px; padding: 12px 16px; text-align: left;
+      font-size: .78rem; color: #555; width: 100%; max-width: 320px;
+    }
+    .offline-detail strong { color: #e67e22; }
+
+    /* ── Safe screen ── */
+    #screen-safe {
+      padding: 40px 24px; align-items: center; justify-content: center;
+      text-align: center; gap: 16px;
+    }
+    .safe-circle {
+      width: 90px; height: 90px; border-radius: 50%;
+      background: var(--green); display: flex; align-items: center; justify-content: center;
+      font-size: 2.5rem; color: #fff;
+    }
+    #screen-safe h2 { font-size: 1.4rem; color: var(--green); }
+
+    /* ── Shared buttons ── */
+    .done-btn {
+      padding: 14px 36px; border: none; border-radius: 12px;
+      background: var(--teal); color: #fff; font-weight: 700; font-size: .95rem; cursor: pointer;
+    }
+    .retry-btn {
+      padding: 12px 28px; border: 1.5px solid #e67e22; border-radius: 10px;
+      background: #fff; color: #e67e22; font-weight: 700; font-size: .88rem; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand-bar"></div>
+  <h1>CRISISMESH</h1>
+  <span class="mode-pill">EMERGENCY MODE</span>
+</header>
+
+<!-- ── Screen 1: Action selection ─────────────────────────────────────────── -->
+<div id="screen-main" class="screen active">
+  <div class="main-intro">
+    <h2>How can we help?</h2>
+    <p>Select an option below. Your report is anonymous and pseudonymized.</p>
+  </div>
+
+  <button class="action-btn btn-red" onclick="startSOS('help')">
+    <span class="icon">🆘</span>
+    <span class="label">I Need Help
+      <small>Send an emergency report to responders</small>
+    </span>
+  </button>
+
+  <button class="action-btn btn-green" onclick="markSafe()">
+    <span class="icon">✓</span>
+    <span class="label">I'm Safe
+      <small>Let responders know you are not in danger</small>
+    </span>
+  </button>
+
+  <button class="action-btn btn-blue" onclick="startSOS('report')">
+    <span class="icon">📢</span>
+    <span class="label">Report Someone
+      <small>Someone nearby needs help</small>
+    </span>
+  </button>
+
+  <div class="privacy-note">
+    No personal data is collected. Device IDs are pseudonymized.
+    Audio is only captured with your explicit consent.
+  </div>
+  <div class="responder-link">
+    <a href="index.html">Responder login →</a>
+  </div>
+</div>
+
+<!-- ── Screen 2: SOS Form ───────────────────────────────────────────────────── -->
+<div id="screen-form" class="screen">
+  <header style="background:#fff;border-bottom:1px solid #eee;">
+    <button class="back-btn" style="color:var(--teal)" onclick="goBack()">← Back</button>
+    <h1 style="color:var(--teal);font-size:.95rem" id="form-title">Emergency Report</h1>
+    <span class="mode-pill" id="form-badge" style="background:#fdecea;color:var(--red);border-color:#f5b7b1">🆘 I Need Help</span>
+  </header>
+
+  <div class="form-body">
+
+    <!-- Location -->
+    <div class="form-group">
+      <label>Your Location</label>
+      <div class="location-row">
+        <button class="loc-btn" id="loc-btn" onclick="detectLocation()">📍 Use my location</button>
+        <span id="location-status">Not set — any information helps</span>
+      </div>
+    </div>
+
+    <!-- Building details -->
+    <div class="form-group">
+      <label>Building (optional)</label>
+      <input id="f-building" type="text" placeholder="e.g. Tower B, City Hall, School" />
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label>Floor (optional)</label>
+        <input id="f-floor" type="text" placeholder="e.g. 3rd, Basement" />
+      </div>
+      <div class="form-group">
+        <label>Room / Unit (optional)</label>
+        <input id="f-room" type="text" placeholder="e.g. 304, Stairwell" />
+      </div>
+    </div>
+
+    <!-- Message -->
+    <div class="form-group">
+      <label>Describe the situation (optional)</label>
+      <textarea id="f-message" placeholder="What is happening? How many people need help? Any injuries?"></textarea>
+    </div>
+
+    <!-- Audio -->
+    <div class="audio-section">
+      <label>🎙 Audio Report (optional)</label>
+      <button id="audio-start-btn" onclick="toggleAudio()">Start Audio</button>
+      <div id="audio-recording" style="display:none">
+        <div class="waveform">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div id="audio-timer">Recording: 0:00</div>
+      </div>
+      <div id="audio-done" style="display:none">✓ Recording captured</div>
+      <small>For the demo, audio is simulated — no actual microphone access is used</small>
+    </div>
+
+    <!-- Submit -->
+    <div class="submit-area">
+      <div id="submit-status"></div>
+      <button id="send-btn" onclick="submitSOS()">SEND EMERGENCY REPORT</button>
+      <button id="cancel-btn" onclick="cancelSOS()">Cancel — I tapped by mistake</button>
+    </div>
+
+    <div class="form-disclaimer">
+      Location accuracy may vary. Even approximate coordinates help responders.
+      You can submit without any location — just tap Send.
+    </div>
+  </div>
+</div>
+
+<!-- ── Screen 3: Success ────────────────────────────────────────────────────── -->
+<div id="screen-success" class="screen">
+  <div class="success-circle">✓</div>
+  <h2>Report Delivered</h2>
+  <p>Responders have been notified. Stay as safe as possible and signal if you can.</p>
+  <div id="report-id"></div>
+  <button class="done-btn" onclick="goHome()">Done</button>
+</div>
+
+<!-- ── Screen 4: Offline saved ──────────────────────────────────────────────── -->
+<div id="screen-offline" class="screen">
+  <div class="offline-circle">📦</div>
+  <h2>Saved — Waiting to Send</h2>
+  <p>Your report is saved on this device. It will be delivered automatically when a connection is available.</p>
+  <div class="offline-detail">
+    <strong>What happens next:</strong><br>
+    Your device will retry every 10 seconds. Once a connection or relay is found,
+    the report will be sent and you will see a confirmation.
+  </div>
+  <button class="retry-btn" onclick="retrySend()">Retry Now</button>
+  <button class="done-btn" onclick="goHome()">Done</button>
+</div>
+
+<!-- ── Screen 5: Marked safe ────────────────────────────────────────────────── -->
+<div id="screen-safe" class="screen">
+  <div class="safe-circle">✓</div>
+  <h2>You're Marked Safe</h2>
+  <p style="color:#666;font-size:.88rem">Your safety status has been recorded. Thank you.</p>
+  <button class="done-btn" onclick="goHome()">Done</button>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let currentSOSType = 'help';
+let currentLat = 12.9716;
+let currentLon = 77.5946;
+let locationCaptured = false;
+let audioActive = false;
+let audioSeconds = 0;
+let audioInterval = null;
+let audioTranscript = '';
+let pendingPayload = null;
+let retryInterval = null;
+
+// ── Screen navigation ─────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function goHome() {
+  stopAudio();
+  clearRetry();
+  resetForm();
+  showScreen('screen-main');
+}
+
+function goBack() {
+  stopAudio();
+  showScreen('screen-main');
+}
+
+// ── Main actions ──────────────────────────────────────────────────────────────
+function startSOS(type) {
+  currentSOSType = type;
+  const isHelp = type === 'help';
+  document.getElementById('form-title').textContent = isHelp ? 'I Need Help' : 'Report Someone';
+  const badge = document.getElementById('form-badge');
+  badge.textContent = isHelp ? '🆘 I Need Help' : '📢 Report Someone';
+  badge.style.background = isHelp ? '#fdecea' : '#eaf4fd';
+  badge.style.color = isHelp ? 'var(--red)' : 'var(--blue)';
+  badge.style.borderColor = isHelp ? '#f5b7b1' : '#aed6f1';
+  const sendBtn = document.getElementById('send-btn');
+  sendBtn.className = isHelp ? '' : 'safe';
+  sendBtn.textContent = isHelp ? 'SEND EMERGENCY REPORT' : 'SEND REPORT';
+  document.getElementById('submit-status').textContent = '';
+  showScreen('screen-form');
+}
+
+async function markSafe() {
+  try {
+    await fetch(`${API}/api/safe`, { method: 'POST' });
+  } catch (_) {}
+  showScreen('screen-safe');
+}
+
+// ── Location ──────────────────────────────────────────────────────────────────
+function detectLocation() {
+  const btn = document.getElementById('loc-btn');
+  const status = document.getElementById('location-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Detecting…';
+  status.className = '';
+  status.textContent = 'Requesting location…';
+
+  if (!navigator.geolocation) {
+    status.textContent = 'Geolocation not available — using demo coordinates';
+    status.className = 'error';
+    btn.disabled = false;
+    btn.textContent = '📍 Use my location';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      currentLat = pos.coords.latitude;
+      currentLon = pos.coords.longitude;
+      locationCaptured = true;
+      const acc = pos.coords.accuracy ? ` (±${Math.round(pos.coords.accuracy)}m)` : '';
+      status.textContent = `📍 Captured${acc}`;
+      status.className = 'ok';
+      btn.textContent = '📍 Location set';
+      btn.disabled = false;
+    },
+    err => {
+      status.textContent = 'Location denied — using approximate area';
+      status.className = 'error';
+      btn.disabled = false;
+      btn.textContent = '📍 Try again';
+    },
+    { timeout: 8000, maximumAge: 30000 }
+  );
+}
+
+// ── Audio simulation ──────────────────────────────────────────────────────────
+const AUDIO_TRANSCRIPTS = {
+  help:   "Please help me, I'm trapped here. I can hear voices outside but can't move.",
+  report: "I can hear someone calling for help from inside the building, possibly on an upper floor.",
+};
+
+function toggleAudio() {
+  if (audioActive) { stopAudio(); return; }
+  audioActive = true;
+  audioSeconds = 0;
+  audioTranscript = '';
+  const startBtn = document.getElementById('audio-start-btn');
+  startBtn.textContent = '⏹ Stop Recording';
+  startBtn.className = 'recording';
+  document.getElementById('audio-recording').style.display = 'block';
+  document.getElementById('audio-done').style.display = 'none';
+  audioInterval = setInterval(() => {
+    audioSeconds++;
+    const m = Math.floor(audioSeconds / 60);
+    const s = audioSeconds % 60;
+    document.getElementById('audio-timer').textContent = `Recording: ${m}:${s.toString().padStart(2,'0')}`;
+    if (audioSeconds >= 10) stopAudio(); // auto-stop at 10s for demo
+  }, 1000);
+}
+
+function stopAudio() {
+  if (!audioActive) return;
+  audioActive = false;
+  clearInterval(audioInterval);
+  audioInterval = null;
+  const startBtn = document.getElementById('audio-start-btn');
+  startBtn.textContent = 'Start Audio';
+  startBtn.className = '';
+  document.getElementById('audio-recording').style.display = 'none';
+  if (audioSeconds > 0) {
+    audioTranscript = AUDIO_TRANSCRIPTS[currentSOSType] || '';
+    document.getElementById('audio-done').style.display = 'block';
+  }
+  audioSeconds = 0;
+}
+
+// ── Submit SOS ────────────────────────────────────────────────────────────────
+async function submitSOS() {
+  stopAudio();
+  const btn = document.getElementById('send-btn');
+  const status = document.getElementById('submit-status');
+  btn.disabled = true;
+  status.className = 'sending';
+  status.textContent = 'Sending…';
+
+  const payload = {
+    lat:               currentLat,
+    lon:               currentLon,
+    type:              currentSOSType,
+    building:          document.getElementById('f-building').value.trim(),
+    floor:             document.getElementById('f-floor').value.trim(),
+    room:              document.getElementById('f-room').value.trim(),
+    message:           document.getElementById('f-message').value.trim(),
+    audio_transcript:  audioTranscript,
+  };
+
+  try {
+    const r = await fetch(`${API}/api/sos`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      const rid = data.event_id ? data.event_id.slice(0, 12) + '…' : '—';
+      document.getElementById('report-id').textContent = `Report ID: ${rid}`;
+      clearRetry();
+      showScreen('screen-success');
+      return;
+    }
+    throw new Error(`HTTP ${r.status}`);
+  } catch (_) {
+    // Offline — save locally
+    pendingPayload = payload;
+    saveToLocalStorage(payload);
+    btn.disabled = false;
+    status.textContent = '';
+    showScreen('screen-offline');
+    startRetry();
+  }
+}
+
+function saveToLocalStorage(payload) {
+  const queue = JSON.parse(localStorage.getItem('crisismesh_queue') || '[]');
+  queue.push({ payload, savedAt: new Date().toISOString() });
+  localStorage.setItem('crisismesh_queue', JSON.stringify(queue));
+}
+
+function startRetry() {
+  clearRetry();
+  retryInterval = setInterval(async () => {
+    const queue = JSON.parse(localStorage.getItem('crisismesh_queue') || '[]');
+    if (!queue.length) { clearRetry(); return; }
+    try {
+      const r = await fetch(`${API}/api/sos`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(queue[0].payload),
+      });
+      if (r.ok) {
+        const data = await r.json();
+        const newQueue = queue.slice(1);
+        localStorage.setItem('crisismesh_queue', JSON.stringify(newQueue));
+        clearRetry();
+        const rid = data.event_id ? data.event_id.slice(0, 12) + '…' : '—';
+        document.getElementById('report-id').textContent = `Report ID: ${rid}`;
+        showScreen('screen-success');
+      }
+    } catch (_) {} // still offline
+  }, 10000);
+}
+
+async function retrySend() {
+  if (!pendingPayload) { goHome(); return; }
+  const btn = document.querySelector('#screen-offline .retry-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Trying…';
+  try {
+    const r = await fetch(`${API}/api/sos`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(pendingPayload),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      localStorage.removeItem('crisismesh_queue');
+      clearRetry();
+      const rid = data.event_id ? data.event_id.slice(0, 12) + '…' : '—';
+      document.getElementById('report-id').textContent = `Report ID: ${rid}`;
+      showScreen('screen-success');
+      return;
+    }
+  } catch (_) {}
+  btn.disabled = false;
+  btn.textContent = 'Retry Now';
+}
+
+function clearRetry() {
+  if (retryInterval) { clearInterval(retryInterval); retryInterval = null; }
+}
+
+function cancelSOS() {
+  if (confirm('Cancel this report?')) { stopAudio(); goHome(); }
+}
+
+function resetForm() {
+  ['f-building','f-floor','f-room','f-message'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('audio-done').style.display = 'none';
+  document.getElementById('audio-recording').style.display = 'none';
+  document.getElementById('location-status').textContent = 'Not set — any information helps';
+  document.getElementById('location-status').className = '';
+  document.getElementById('loc-btn').textContent = '📍 Use my location';
+  document.getElementById('loc-btn').disabled = false;
+  document.getElementById('submit-status').textContent = '';
+  document.getElementById('send-btn').disabled = false;
+  locationCaptured = false;
+  audioTranscript = '';
+  audioSeconds = 0;
+  stopAudio();
+}
+
+// Auto-retry any queued reports on page load
+window.addEventListener('load', () => {
+  const queue = JSON.parse(localStorage.getItem('crisismesh_queue') || '[]');
+  if (queue.length) startRetry();
+});
+</script>
+</body>
+</html>
